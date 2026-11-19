@@ -8,9 +8,6 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
     res.status(401).json({ error: 'No token provided' });
     return;
   }
-
-
-
   const token = authHeader.split(' ')[1];
 
   try {
