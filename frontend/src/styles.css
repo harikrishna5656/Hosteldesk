@@ -1,0 +1,175 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+:root {
+  --radius: 0.75rem;
+  /* Brand Palette */
+  --background: #F5F5F0;
+  --foreground: #0B0B0B;
+  --card: #FFFFFF;
+  --card-foreground: #0B0B0B;
+  --popover: #FFFFFF;
+  --popover-foreground: #0B0B0B;
+  
+  /* Primary Action: Highlighter Yellow with Midnight Black text */
+  --primary: #EEFF2E;
+  --primary-foreground: #0B0B0B;
+  --primary-soft: #F4F4EB;
+
+  --secondary: #FFFFFF;
+  --secondary-foreground: #0B0B0B;
+  --muted: #F3F4F6;
+  --muted-foreground: #6B7280;
+
+  /* Accent: Highlighter Yellow */
+  --accent: #EEFF2E;
+  --accent-foreground: #0B0B0B;
+
+  /* Semantic Colors */
+  --destructive: #DC2626;
+  --destructive-foreground: #FFFFFF;
+  --success: #16A34A;
+  --success-foreground: #FFFFFF;
+  --warning: #D97706;
+  --warning-foreground: #FFFFFF;
+  --info: #2563EB;
+  --info-foreground: #FFFFFF;
+
+  --border: #E5E7EB;
+  --input: #E5E7EB;
+  --ring: #0B0B0B;
+
+  --chart-1: #0B0B0B;
+  --chart-2: #EEFF2E;
+  --chart-3: #2563EB;
+  --chart-4: #16A34A;
+  --chart-5: #D97706;
+}
+
+.dark {
+  --background: #0B0B0B;
+  --foreground: #F5F5F0;
+  --card: #141414;
+  --card-foreground: #F5F5F0;
+  --popover: #171717;
+  --popover-foreground: #F5F5F0;
+
+  --primary: #EEFF2E;
+  --primary-foreground: #0B0B0B;
+  --primary-soft: #1E1E1E;
+
+  --secondary: #1F1F1F;
+  --secondary-foreground: #F5F5F0;
+  --muted: #1F1F1F;
+  --muted-foreground: #9CA3AF;
+
+  --accent: #EEFF2E;
+  --accent-foreground: #0B0B0B;
+
+  --destructive: #EF4444;
+  --destructive-foreground: #FFFFFF;
+  --success: #22C55E;
+  --success-foreground: #0B0B0B;
+  --warning: #F59E0B;
+  --warning-foreground: #0B0B0B;
+  --info: #3B82F6;
+  --info-foreground: #FFFFFF;
+
+  --border: #262626;
+  --input: #262626;
+  --ring: #EEFF2E;
+
+  --chart-1: #EEFF2E;
+  --chart-2: #3B82F6;
+  --chart-3: #22C55E;
+  --chart-4: #F59E0B;
+  --chart-5: #EF4444;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html, body {
+    font-family: var(--font-sans);
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    letter-spacing: -0.025em;
+  }
+}
+
+@layer components {
+  /* Reusable button styles */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:brightness-95 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground transition-all hover:bg-muted active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-destructive px-4 py-2.5 text-sm font-semibold text-destructive-foreground transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  /* Form input field */
+  .input-field {
+    @apply w-full px-3.5 py-2.5 rounded-xl bg-card border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#EEFF2E] focus:border-[#0B0B0B] transition;
+  }
+
+  /* Standard SaaS Card */
+  .card-surface {
+    @apply rounded-2xl bg-card border border-border p-5 lg:p-6 shadow-[0_1px_3px_rgba(0,0,0,0.03)];
+  }
+}

@@ -1,0 +1,131 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Hostel {
+  id                    String        @id @default(uuid()) @db.Uuid
+  ownerId               String        @map("owner_id") @db.Uuid
+  name                  String        @db.VarChar(255)
+  code                  String        @unique @db.VarChar(50)
+  type                  String        @db.VarChar(50) // "Boys" | "Girls" | "Co-ed"
+  address               String        @db.Text
+  city                  String        @db.VarChar(100)
+  state                 String        @db.VarChar(100)
+  pincode               String        @db.VarChar(20)
+  contactPhone          String        @map("contact_phone") @db.VarChar(50)
+  contactEmail          String        @map("contact_email") @db.VarChar(255)
+  monthlyTargetRevenue  Decimal?      @default(0) @map("monthly_target_revenue") @db.Decimal(12, 2)
+  createdAt             DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  staff                 HostelStaff[]
+  rooms                 Room[]
+  tenants               Tenant[]
+  payments              Payment[]
+  expenses              Expense[]
+
+  @@index([ownerId])
+  @@map("hostels")
+}
+
+model HostelStaff {
+  id          String   @id @default(uuid()) @db.Uuid
+  hostelId    String   @map("hostel_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  branchRole  String   @map("branch_role") @db.VarChar(50) // "warden" | "manager" | "accountant" | "cleaner"
+  permissions Json?    @default("[]")
+  assignedAt  DateTime @default(now()) @map("assigned_at") @db.Timestamptz
+
+  hostel      Hostel   @relation(fields: [hostelId], references: [id], onDelete: Cascade)
+
+  @@unique([hostelId, userId])
+  @@index([userId])
+  @@index([hostelId])
+  @@map("hostel_staff")
+}
+
+model Room {
+  id        String   @id @default(uuid()) @db.Uuid
+  hostelId  String   @map("hostel_id") @db.Uuid
+  number    String   @map("room_number") @db.VarChar(50)
+  type      String   @db.VarChar(50) // "Single" | "Double" | "Triple" | "Sharing"
+  capacity  Int      @default(1)
+  occupied  Int      @default(0)
+  rent      Decimal  @db.Decimal(10, 2)
+  floor     Int      @default(1)
+  status    String   @default("available") @db.VarChar(50) // "available" | "occupied" | "maintenance"
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  hostel    Hostel   @relation(fields: [hostelId], references: [id], onDelete: Cascade)
+  tenants   Tenant[]
+
+  @@unique([hostelId, number])
+  @@index([hostelId])
+  @@map("rooms")
+}
+
+model Tenant {
+  id         String    @id @default(uuid()) @db.Uuid
+  hostelId   String    @map("hostel_id") @db.Uuid
+  roomId     String?   @map("room_id") @db.Uuid
+  roomNumber String    @map("room_number") @db.VarChar(50)
+  name       String    @db.VarChar(255)
+  phone      String    @db.VarChar(50)
+  email      String    @db.VarChar(255)
+  checkIn    DateTime  @default(now()) @map("check_in") @db.Date
+  rentDue    DateTime  @map("rent_due") @db.Date
+  rentAmount Decimal   @map("rent_amount") @db.Decimal(10, 2)
+  status     String    @default("active") @db.VarChar(50) // "active" | "checkout-pending" | "left"
+  paid       Boolean   @default(false)
+  avatar     String?   @db.Text
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  hostel     Hostel    @relation(fields: [hostelId], references: [id], onDelete: Cascade)
+  room       Room?     @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  payments   Payment[]
+
+  @@index([hostelId])
+  @@index([status])
+  @@map("tenants")
+}
+
+model Payment {
+  id         String   @id @default(uuid()) @db.Uuid
+  hostelId   String   @map("hostel_id") @db.Uuid
+  tenantId   String?  @map("tenant_id") @db.Uuid
+  tenantName String   @map("tenant_name") @db.VarChar(255)
+  roomNumber String   @map("room_number") @db.VarChar(50)
+  amount     Decimal  @db.Decimal(10, 2)
+  method     String   @db.VarChar(50) // "Cash" | "UPI" | "Bank Transfer"
+  date       DateTime @default(now()) @db.Date
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  hostel     Hostel   @relation(fields: [hostelId], references: [id], onDelete: Cascade)
+  tenant     Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@index([hostelId])
+  @@map("payments")
+}
+
+model Expense {
+  id        String   @id @default(uuid()) @db.Uuid
+  hostelId  String   @map("hostel_id") @db.Uuid
+  date      DateTime @default(now()) @db.Date
+  category  String   @db.VarChar(50) // "Utilities" | "Maintenance" | "Salaries" | "Groceries" | "Other"
+  amount    Decimal  @db.Decimal(10, 2)
+  note      String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  hostel    Hostel   @relation(fields: [hostelId], references: [id], onDelete: Cascade)
+
+  @@index([hostelId])
+  @@map("expenses")
+}

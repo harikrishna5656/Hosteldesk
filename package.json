@@ -1,0 +1,17 @@
+{
+  "name": "hostelpms",
+  "version": "1.0.0",
+  "description": "Hostel Management System (PMS) - Frontend & Backend",
+  "private": true,
+  "scripts": {
+    "dev:frontend": "npm run dev --prefix frontend",
+    "dev:backend": "npm run dev --prefix backend",
+    "build:frontend": "npm run build --prefix frontend",
+    "build:backend": "npm run build --prefix backend",
+    "install:frontend": "npm install --prefix frontend",
+    "install:backend": "npm install --prefix backend"
+  },
+  "keywords": ["hostel", "pms", "management"],
+  "author": "",
+  "license": "ISC"
+}
