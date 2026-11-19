@@ -34,13 +34,13 @@ function LoginPage() {
     e.preventDefault();
     setError("");
     setLoading(true);
-    const success = await login(email, password);
+    const result = await login(email, password);
     setLoading(false);
-    if (success) {
+    if (result.success) {
       toast.success("Welcome back!");
       navigate({ to: "/" });
     } else {
-      setError("Please enter both email and password.");
+      setError(result.error || "Please enter valid credentials.");
     }
   };
 
@@ -108,10 +108,6 @@ function LoginPage() {
           </Link>
         </p>
       </div>
-
-      <p className="text-[11px] text-center mt-6 text-muted-foreground">
-        Demo mode — any email & password works
-      </p>
     </div>
   );
 }

@@ -38,13 +38,13 @@ function SignupPage() {
       return;
     }
     setLoading(true);
-    const success = await signup(name, email, password);
+    const result = await signup(name, email, password);
     setLoading(false);
-    if (success) {
+    if (result.success) {
       toast.success("Account created!");
       navigate({ to: "/" });
     } else {
-      setError("Please fill in all fields.");
+      setError(result.error || "Please fill in all fields.");
     }
   };
 
