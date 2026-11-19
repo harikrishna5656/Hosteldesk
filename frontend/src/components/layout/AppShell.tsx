@@ -7,6 +7,7 @@ import { useHostel } from "@/lib/hostelContext";
 import { HostelSwitcher } from "./HostelSwitcher";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 
+
 const nav = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/rooms", label: "Rooms", icon: BedDouble },

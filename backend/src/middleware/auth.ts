@@ -10,6 +10,7 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
   }
   const token = authHeader.split(' ')[1];
 
+
   try {
     const secret = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this-in-production';
     const decoded = jwt.verify(token, secret) as {
