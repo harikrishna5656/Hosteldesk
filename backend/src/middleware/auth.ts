@@ -9,6 +9,8 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
     return;
   }
 
+
+
   const token = authHeader.split(' ')[1];
 
   try {
