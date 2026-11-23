@@ -1,17 +1,40 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../db/supabase.js';
-import { isUUID, resolveHostelId } from '../utils/uuid.js';
+import { isUUID } from '../utils/uuid.js';
+import { authMiddleware } from '../middleware/auth.js';
+import { getUserHostelIds } from '../utils/hostelScope.js';
 
 const router = Router();
 
-// GET tenants (optionally filtered by hostelId)
+// Enforce authentication on all tenant routes
+router.use(authMiddleware);
+
+// GET tenants (strictly scoped to authenticated user's hostels)
 router.get('/', async (req: Request, res: Response): Promise<void> => {
   try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const ownedHostelIds = await getUserHostelIds(userId);
+    if (ownedHostelIds.length === 0) {
+      res.json([]);
+      return;
+    }
+
     const { hostelId } = req.query;
 
     let query = supabase.from('tenants').select('*').order('created_at', { ascending: false });
     if (hostelId && hostelId !== 'all' && isUUID(hostelId)) {
+      if (!ownedHostelIds.includes(String(hostelId))) {
+        res.json([]);
+        return;
+      }
       query = query.eq('hostel_id', hostelId);
+    } else {
+      query = query.in('hostel_id', ownedHostelIds);
     }
 
     const { data, error } = await query;
@@ -52,9 +75,21 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// POST check-in tenant
+// POST check-in tenant (strictly in an owned hostel)
 router.post('/', async (req: Request, res: Response): Promise<void> => {
   try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const ownedHostelIds = await getUserHostelIds(userId);
+    if (ownedHostelIds.length === 0) {
+      res.status(400).json({ error: 'You must register a hostel property before checking in tenants.' });
+      return;
+    }
+
     const {
       hostelId,
       roomId,
@@ -78,7 +113,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const targetHostelId = await resolveHostelId(hostelId);
+    const targetHostelId = isUUID(hostelId) && ownedHostelIds.includes(String(hostelId))
+      ? String(hostelId)
+      : ownedHostelIds[0];
 
     const insertData: Record<string, any> = {
       hostel_id: targetHostelId,
@@ -108,9 +145,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
     console.log(`✅ [Supabase DB] Check-in Tenant: ${tenant.name} -> Room ${tenant.room_number}`);
 
-    // Update room occupancy if roomId is valid
+    // Update room occupancy if roomId is valid and owned
     if (isUUID(roomId)) {
-      const { data: room } = await supabase.from('rooms').select('occupied, capacity').eq('id', roomId).single();
+      const { data: room } = await supabase.from('rooms').select('occupied, capacity').eq('id', roomId).in('hostel_id', ownedHostelIds).single();
       if (room) {
         const newOccupied = (room.occupied || 0) + 1;
         const newStatus = newOccupied >= room.capacity ? 'occupied' : 'available';
@@ -170,12 +207,19 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// PUT update tenant (status, checkout, reminder count, advance return)
+// PUT update tenant (scoped to owned hostels)
 router.put('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    if (!isUUID(id)) {
-      res.status(400).json({ error: 'Invalid tenant UUID' });
+    const userId = req.user?.id;
+    if (!isUUID(id) || !userId) {
+      res.status(400).json({ error: 'Invalid tenant UUID or unauthorized' });
+      return;
+    }
+
+    const ownedHostelIds = await getUserHostelIds(userId);
+    if (ownedHostelIds.length === 0) {
+      res.status(403).json({ error: 'Access denied' });
       return;
     }
 
@@ -205,6 +249,7 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
       .from('tenants')
       .update(updates)
       .eq('id', id)
+      .in('hostel_id', ownedHostelIds)
       .select()
       .single();
 
@@ -214,8 +259,7 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
     if (body.status === 'left' && tenant.room_id && isUUID(tenant.room_id)) {
       const { data: room } = await supabase.from('rooms').select('occupied, capacity').eq('id', tenant.room_id).single();
       if (room && room.occupied > 0) {
-        const newOccupied = room.occupied - 1;
-        await supabase.from('rooms').update({ occupied: newOccupied, status: 'available' }).eq('id', tenant.room_id);
+        await supabase.from('rooms').update({ occupied: room.occupied - 1, status: 'available' }).eq('id', tenant.room_id);
       }
     }
 
@@ -227,16 +271,23 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// DELETE tenant
+// DELETE tenant (scoped to owned hostels)
 router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    if (!isUUID(id)) {
-      res.status(400).json({ error: 'Invalid tenant UUID' });
+    const userId = req.user?.id;
+    if (!isUUID(id) || !userId) {
+      res.status(400).json({ error: 'Invalid tenant UUID or unauthorized' });
       return;
     }
 
-    const { data: tenant } = await supabase.from('tenants').select('room_id').eq('id', id).single();
+    const ownedHostelIds = await getUserHostelIds(userId);
+    if (ownedHostelIds.length === 0) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+
+    const { data: tenant } = await supabase.from('tenants').select('room_id').eq('id', id).in('hostel_id', ownedHostelIds).single();
     if (tenant?.room_id && isUUID(tenant.room_id)) {
       const { data: room } = await supabase.from('rooms').select('occupied').eq('id', tenant.room_id).single();
       if (room && room.occupied > 0) {
@@ -244,7 +295,7 @@ router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
       }
     }
 
-    const { error } = await supabase.from('tenants').delete().eq('id', id);
+    const { error } = await supabase.from('tenants').delete().eq('id', id).in('hostel_id', ownedHostelIds);
     if (error) throw error;
 
     console.log(`🗑️ [Supabase DB] Deleted Tenant ID: ${id}`);

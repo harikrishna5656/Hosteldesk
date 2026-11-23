@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react";
+import { useAuth } from "./auth";
 import {
   Hostel,
   Room,
@@ -79,123 +80,93 @@ const isLegacySeed = (list: any[]) =>
   );
 
 export function HostelProvider({ children }: { children: React.ReactNode }) {
-  // 1. Hostels state
-  const [hostels, setHostels] = useState<Hostel[]>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const stored = localStorage.getItem("hostelpms_hostels");
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (!isLegacySeed(parsed)) return parsed;
-        }
-      } catch {}
-    }
-    return initialHostels;
-  });
+  const { user, isAuthenticated } = useAuth();
+
+  // Helper for auth headers
+  const getAuthHeaders = useCallback((): HeadersInit => {
+    return {
+      "Content-Type": "application/json",
+      ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
+    };
+  }, [user?.token]);
+
+  // 1. Hostels state (strictly isolated per authenticated user)
+  const [hostels, setHostels] = useState<Hostel[]>([]);
 
   // 2. Active Hostel Selection ('all' or specific hostel UUID)
-  const [activeHostelId, setActiveHostelIdState] = useState<string | "all">(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const stored = localStorage.getItem("hostelpms_active_hostel_id");
-        if (stored && isUUID(stored)) {
-          return stored;
-        }
-      } catch {}
-    }
-    return "all";
-  });
+  const [activeHostelId, setActiveHostelIdState] = useState<string | "all">("all");
 
   // 3. Domain entities state
-  const [roomsList, setRoomsList] = useState<Room[]>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const stored = localStorage.getItem("hostelpms_rooms");
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (!isLegacySeed(parsed)) return parsed;
-        }
-      } catch {}
-    }
-    return initialRooms;
-  });
+  const [roomsList, setRoomsList] = useState<Room[]>([]);
+  const [tenantsList, setTenantsList] = useState<Tenant[]>([]);
+  const [paymentsList, setPaymentsList] = useState<Payment[]>([]);
+  const [expensesList, setExpensesList] = useState<Expense[]>([]);
 
-  const [tenantsList, setTenantsList] = useState<Tenant[]>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const stored = localStorage.getItem("hostelpms_tenants");
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (!isLegacySeed(parsed)) return parsed;
-        }
-      } catch {}
-    }
-    return initialTenants;
-  });
-
-  const [paymentsList, setPaymentsList] = useState<Payment[]>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const stored = localStorage.getItem("hostelpms_payments");
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (!isLegacySeed(parsed)) return parsed;
-        }
-      } catch {}
-    }
-    return initialPayments;
-  });
-
-  const [expensesList, setExpensesList] = useState<Expense[]>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const stored = localStorage.getItem("hostelpms_expenses");
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (!isLegacySeed(parsed)) return parsed;
-        }
-      } catch {}
-    }
-    return initialExpenses;
-  });
-
-  // Synchronize state with LocalStorage for instant UI render
+  // Reset or load state whenever authenticated user switches (multitenant client isolation)
   useEffect(() => {
+    if (!isAuthenticated || !user?.id) {
+      setHostels([]);
+      setActiveHostelIdState("all");
+      setRoomsList([]);
+      setTenantsList([]);
+      setPaymentsList([]);
+      setExpensesList([]);
+      return;
+    }
+
+    // Load cached data specifically scoped to this user
     try {
-      localStorage.setItem("hostelpms_hostels", JSON.stringify(hostels));
-      localStorage.setItem("hostelpms_active_hostel_id", activeHostelId);
-      localStorage.setItem("hostelpms_rooms", JSON.stringify(roomsList));
-      localStorage.setItem("hostelpms_tenants", JSON.stringify(tenantsList));
-      localStorage.setItem("hostelpms_payments", JSON.stringify(paymentsList));
-      localStorage.setItem("hostelpms_expenses", JSON.stringify(expensesList));
+      const uKey = `hostelpms_${user.id}_`;
+      const storedHostels = localStorage.getItem(`${uKey}hostels`);
+      const storedRooms = localStorage.getItem(`${uKey}rooms`);
+      const storedTenants = localStorage.getItem(`${uKey}tenants`);
+      const storedPayments = localStorage.getItem(`${uKey}payments`);
+      const storedExpenses = localStorage.getItem(`${uKey}expenses`);
+      const storedActiveId = localStorage.getItem(`${uKey}active_hostel_id`);
+
+      setHostels(storedHostels ? JSON.parse(storedHostels) : []);
+      setRoomsList(storedRooms ? JSON.parse(storedRooms) : []);
+      setTenantsList(storedTenants ? JSON.parse(storedTenants) : []);
+      setPaymentsList(storedPayments ? JSON.parse(storedPayments) : []);
+      setExpensesList(storedExpenses ? JSON.parse(storedExpenses) : []);
+      setActiveHostelIdState(storedActiveId && isUUID(storedActiveId) ? storedActiveId : "all");
     } catch {}
-  }, [hostels, activeHostelId, roomsList, tenantsList, paymentsList, expensesList]);
+  }, [user?.id, isAuthenticated]);
 
-  // LIVE DATABASE FETCH FUNCTION
+  // Synchronize state with User-Scoped LocalStorage
+  useEffect(() => {
+    if (!user?.id || !isAuthenticated) return;
+    try {
+      const uKey = `hostelpms_${user.id}_`;
+      localStorage.setItem(`${uKey}hostels`, JSON.stringify(hostels));
+      localStorage.setItem(`${uKey}active_hostel_id`, activeHostelId);
+      localStorage.setItem(`${uKey}rooms`, JSON.stringify(roomsList));
+      localStorage.setItem(`${uKey}tenants`, JSON.stringify(tenantsList));
+      localStorage.setItem(`${uKey}payments`, JSON.stringify(paymentsList));
+      localStorage.setItem(`${uKey}expenses`, JSON.stringify(expensesList));
+    } catch {}
+  }, [user?.id, isAuthenticated, hostels, activeHostelId, roomsList, tenantsList, paymentsList, expensesList]);
+
+  // LIVE DATABASE FETCH FUNCTION (Strictly scoped with JWT Authorization)
   const refreshData = useCallback(async () => {
-    if (!API_URL) return;
+    if (!API_URL || !isAuthenticated || !user?.token) return;
 
     try {
-      // 1. Fetch Hostels from Supabase
-      const hRes = await fetch(`${API_URL}/api/hostels`);
+      const headers = { Authorization: `Bearer ${user.token}` };
+
+      // 1. Fetch Hostels from Supabase (strictly scoped to this owner)
+      const hRes = await fetch(`${API_URL}/api/hostels`, { headers });
       if (hRes.ok) {
         const hData = await hRes.json();
-        if (Array.isArray(hData) && hData.length > 0) {
-          setHostels((prev) => {
-            const map = new Map();
-            hData.forEach((h) => map.set(h.id, h));
-            prev.forEach((h) => {
-              if (!map.has(h.id)) map.set(h.id, h);
-            });
-            return Array.from(map.values());
-          });
+        if (Array.isArray(hData)) {
+          setHostels(hData);
         }
       }
 
       const hostelParam = isUUID(activeHostelId) ? `?hostelId=${activeHostelId}` : "";
 
       // 2. Fetch Rooms from Supabase
-      const rRes = await fetch(`${API_URL}/api/rooms${hostelParam}`);
+      const rRes = await fetch(`${API_URL}/api/rooms${hostelParam}`, { headers });
       if (rRes.ok) {
         const rData = await rRes.json();
         if (Array.isArray(rData)) {
@@ -204,7 +175,7 @@ export function HostelProvider({ children }: { children: React.ReactNode }) {
       }
 
       // 3. Fetch Tenants from Supabase
-      const tRes = await fetch(`${API_URL}/api/tenants${hostelParam}`);
+      const tRes = await fetch(`${API_URL}/api/tenants${hostelParam}`, { headers });
       if (tRes.ok) {
         const tData = await tRes.json();
         if (Array.isArray(tData)) {
@@ -213,7 +184,7 @@ export function HostelProvider({ children }: { children: React.ReactNode }) {
       }
 
       // 4. Fetch Payments from Supabase
-      const pRes = await fetch(`${API_URL}/api/payments${hostelParam}`);
+      const pRes = await fetch(`${API_URL}/api/payments${hostelParam}`, { headers });
       if (pRes.ok) {
         const pData = await pRes.json();
         if (Array.isArray(pData)) {
@@ -222,7 +193,7 @@ export function HostelProvider({ children }: { children: React.ReactNode }) {
       }
 
       // 5. Fetch Expenses from Supabase
-      const eRes = await fetch(`${API_URL}/api/expenses${hostelParam}`);
+      const eRes = await fetch(`${API_URL}/api/expenses${hostelParam}`, { headers });
       if (eRes.ok) {
         const eData = await eRes.json();
         if (Array.isArray(eData)) {
@@ -230,14 +201,16 @@ export function HostelProvider({ children }: { children: React.ReactNode }) {
         }
       }
     } catch (err) {
-      console.warn("[HostelContext] Live API sync offline/unreachable, continuing with local cache:", err);
+      console.warn("[HostelContext] Live API sync offline/unreachable:", err);
     }
-  }, [activeHostelId]);
+  }, [activeHostelId, isAuthenticated, user?.token]);
 
-  // Trigger live API fetch on mount and whenever active property switches
+  // Trigger live API fetch on mount and whenever active property or user switches
   useEffect(() => {
-    refreshData();
-  }, [refreshData]);
+    if (isAuthenticated && user?.token) {
+      refreshData();
+    }
+  }, [refreshData, isAuthenticated, user?.token]);
 
   // Fallback active property
   useEffect(() => {
@@ -322,18 +295,18 @@ export function HostelProvider({ children }: { children: React.ReactNode }) {
         try {
           const res = await fetch(`${API_URL}/api/hostels`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: getAuthHeaders(),
             body: JSON.stringify(newHostelData),
           });
           if (res.ok) {
             const saved = await res.json();
-            setHostels((prev) => prev.map((h) => (h.id === newHostel.id ? saved : h)));
+            setHostels((prev) => [...prev.filter((h) => h.id !== newHostel.id), saved]);
             setActiveHostelIdState(saved.id);
           }
         } catch {}
       }
     },
-    []
+    [getAuthHeaders]
   );
 
   const addRoom = useCallback(
@@ -351,17 +324,17 @@ export function HostelProvider({ children }: { children: React.ReactNode }) {
         try {
           const res = await fetch(`${API_URL}/api/rooms`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: getAuthHeaders(),
             body: JSON.stringify({ ...roomData, hostelId: targetHostelId }),
           });
           if (res.ok) {
             const saved = await res.json();
-            setRoomsList((prev) => prev.map((r) => (r.id === tempId ? saved : r)));
+            setRoomsList((prev) => [...prev.filter((r) => r.id !== tempId), saved]);
           }
         } catch {}
       }
     },
-    [currentHostelId, hostels]
+    [currentHostelId, hostels, getAuthHeaders]
   );
 
   const updateRoom = useCallback(async (room: Room) => {
@@ -371,12 +344,12 @@ export function HostelProvider({ children }: { children: React.ReactNode }) {
       try {
         await fetch(`${API_URL}/api/rooms/${room.id}`, {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          headers: getAuthHeaders(),
           body: JSON.stringify(room),
         });
       } catch {}
     }
-  }, []);
+  }, [getAuthHeaders]);
 
   const canDeleteRoom = useCallback(
     (roomId: string): { allowed: boolean; reason?: string; activeCount: number } => {
@@ -410,11 +383,14 @@ export function HostelProvider({ children }: { children: React.ReactNode }) {
       setRoomsList((prev) => prev.filter((r) => r.id !== id));
 
       if (API_URL && !id.startsWith("r_")) {
-        fetch(`${API_URL}/api/rooms/${id}`, { method: "DELETE" }).catch(() => {});
+        fetch(`${API_URL}/api/rooms/${id}`, {
+          method: "DELETE",
+          headers: getAuthHeaders(),
+        }).catch(() => {});
       }
       return { success: true };
     },
-    [canDeleteRoom]
+    [canDeleteRoom, getAuthHeaders]
   );
 
   const addTenant = useCallback(
@@ -472,17 +448,17 @@ export function HostelProvider({ children }: { children: React.ReactNode }) {
         try {
           const res = await fetch(`${API_URL}/api/tenants`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: getAuthHeaders(),
             body: JSON.stringify({ ...tenantData, hostelId: targetHostelId }),
           });
           if (res.ok) {
             const saved = await res.json();
-            setTenantsList((prev) => prev.map((t) => (t.id === tempId ? { ...saved, ...t, id: saved.id } : t)));
+            setTenantsList((prev) => [...prev.filter((t) => t.id !== tempId), saved]);
           }
         } catch {}
       }
     },
-    [currentHostelId, hostels]
+    [currentHostelId, hostels, getAuthHeaders]
   );
 
   const updateTenant = useCallback(async (updatedTenant: Tenant) => {
@@ -520,12 +496,12 @@ export function HostelProvider({ children }: { children: React.ReactNode }) {
       try {
         await fetch(`${API_URL}/api/tenants/${updatedTenant.id}`, {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          headers: getAuthHeaders(),
           body: JSON.stringify(updatedTenant),
         });
       } catch {}
     }
-  }, []);
+  }, [getAuthHeaders]);
 
   const deleteTenant = useCallback((id: string) => {
     setTenantsList((prev) => {
@@ -556,9 +532,12 @@ export function HostelProvider({ children }: { children: React.ReactNode }) {
     });
 
     if (API_URL && !id.startsWith("t_")) {
-      fetch(`${API_URL}/api/tenants/${id}`, { method: "DELETE" }).catch(() => {});
+      fetch(`${API_URL}/api/tenants/${id}`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      }).catch(() => {});
     }
-  }, []);
+  }, [getAuthHeaders]);
 
   const addPayment = useCallback(
     async (paymentData: Omit<Payment, "id" | "hostelId"> & { hostelId?: string }) => {
@@ -575,17 +554,17 @@ export function HostelProvider({ children }: { children: React.ReactNode }) {
         try {
           const res = await fetch(`${API_URL}/api/payments`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: getAuthHeaders(),
             body: JSON.stringify({ ...paymentData, hostelId: targetHostelId }),
           });
           if (res.ok) {
             const saved = await res.json();
-            setPaymentsList((prev) => prev.map((p) => (p.id === tempId ? saved : p)));
+            setPaymentsList((prev) => [...prev.filter((p) => p.id !== tempId), saved]);
           }
         } catch {}
       }
     },
-    [currentHostelId, hostels]
+    [currentHostelId, hostels, getAuthHeaders]
   );
 
   const addExpense = useCallback(
@@ -603,17 +582,17 @@ export function HostelProvider({ children }: { children: React.ReactNode }) {
         try {
           const res = await fetch(`${API_URL}/api/expenses`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: getAuthHeaders(),
             body: JSON.stringify({ ...expenseData, hostelId: targetHostelId }),
           });
           if (res.ok) {
             const saved = await res.json();
-            setExpensesList((prev) => prev.map((e) => (e.id === tempId ? saved : e)));
+            setExpensesList((prev) => [...prev.filter((e) => e.id !== tempId), saved]);
           }
         } catch {}
       }
     },
-    [currentHostelId, hostels]
+    [currentHostelId, hostels, getAuthHeaders]
   );
 
   return (

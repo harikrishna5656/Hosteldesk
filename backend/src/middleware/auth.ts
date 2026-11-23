@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { JWT_SECRET } from '../config/jwt.js';
 
 export function authMiddleware(req: Request, res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
@@ -10,10 +11,8 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
   }
   const token = authHeader.split(' ')[1];
 
-
   try {
-    const secret = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this-in-production';
-    const decoded = jwt.verify(token, secret) as {
+    const decoded = jwt.verify(token, JWT_SECRET) as {
       id: string;
       email: string;
       name: string;

@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { authMiddleware } from '../middleware/auth.js';
 import { registerUser, verifyUser, findUserByEmail } from '../services/authStore.js';
+import { JWT_SECRET, JWT_EXPIRES_IN } from '../config/jwt.js';
 
 const router = Router();
 
@@ -27,9 +28,7 @@ router.post('/signup', async (req: Request, res: Response): Promise<void> => {
   try {
     const { user } = await registerUser(name, email, password);
 
-    const jwtSecret = process.env.JWT_SECRET || 'secret';
-    const expiresIn = process.env.JWT_EXPIRES_IN || '7d';
-    const token = jwt.sign(user, jwtSecret, { expiresIn } as jwt.SignOptions);
+    const token = jwt.sign(user, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN } as jwt.SignOptions);
 
     res.status(201).json({
       message: 'Account created successfully',
@@ -54,9 +53,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
   try {
     const user = await verifyUser(email, password);
 
-    const jwtSecret = process.env.JWT_SECRET || 'secret';
-    const expiresIn = process.env.JWT_EXPIRES_IN || '7d';
-    const token = jwt.sign(user, jwtSecret, { expiresIn } as jwt.SignOptions);
+    const token = jwt.sign(user, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN } as jwt.SignOptions);
 
     res.json({
       message: 'Login successful',

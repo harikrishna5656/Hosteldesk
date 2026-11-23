@@ -1,19 +1,42 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../db/supabase.js';
-import { isUUID, resolveHostelId } from '../utils/uuid.js';
+import { isUUID } from '../utils/uuid.js';
+import { authMiddleware } from '../middleware/auth.js';
+import { getUserHostelIds } from '../utils/hostelScope.js';
 
 const router = Router();
 
-// GET all rooms (optionally filtered by hostelId)
+// Enforce authentication on all room routes
+router.use(authMiddleware);
+
+// GET all rooms (strictly scoped to authenticated user's hostels)
 router.get('/', async (req: Request, res: Response): Promise<void> => {
   try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const ownedHostelIds = await getUserHostelIds(userId);
+    if (ownedHostelIds.length === 0) {
+      res.json([]);
+      return;
+    }
+
     const { hostelId } = req.query;
 
     let query = supabase.from('rooms').select('*').order('room_number', { ascending: true });
     
-    // Only apply hostel_id filter if it's a valid UUID
+    // Scoped filtering
     if (hostelId && hostelId !== 'all' && isUUID(hostelId)) {
+      if (!ownedHostelIds.includes(String(hostelId))) {
+        res.json([]);
+        return;
+      }
       query = query.eq('hostel_id', hostelId);
+    } else {
+      query = query.in('hostel_id', ownedHostelIds);
     }
 
     const { data, error } = await query;
@@ -39,9 +62,21 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// POST create room
+// POST create room (strictly in an owned hostel)
 router.post('/', async (req: Request, res: Response): Promise<void> => {
   try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const ownedHostelIds = await getUserHostelIds(userId);
+    if (ownedHostelIds.length === 0) {
+      res.status(400).json({ error: 'You must register a hostel property before adding rooms.' });
+      return;
+    }
+
     const { hostelId, number, type, capacity, rent, floor, status } = req.body;
 
     if (!number || rent === undefined) {
@@ -49,7 +84,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const targetHostelId = await resolveHostelId(hostelId);
+    const targetHostelId = isUUID(hostelId) && ownedHostelIds.includes(String(hostelId))
+      ? String(hostelId)
+      : ownedHostelIds[0];
 
     const { data, error } = await supabase
       .from('rooms')
@@ -86,12 +123,19 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// PUT update room
+// PUT update room (ensure ownership)
 router.put('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    if (!isUUID(id)) {
-      res.status(400).json({ error: 'Invalid room UUID' });
+    const userId = req.user?.id;
+    if (!isUUID(id) || !userId) {
+      res.status(400).json({ error: 'Invalid room UUID or unauthorized' });
+      return;
+    }
+
+    const ownedHostelIds = await getUserHostelIds(userId);
+    if (ownedHostelIds.length === 0) {
+      res.status(403).json({ error: 'Access denied' });
       return;
     }
 
@@ -110,6 +154,7 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
       .from('rooms')
       .update(updates)
       .eq('id', id)
+      .in('hostel_id', ownedHostelIds)
       .select()
       .single();
 
@@ -132,12 +177,19 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// DELETE room
+// DELETE room (ensure ownership)
 router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    if (!isUUID(id)) {
-      res.status(400).json({ error: 'Invalid room UUID' });
+    const userId = req.user?.id;
+    if (!isUUID(id) || !userId) {
+      res.status(400).json({ error: 'Invalid room UUID or unauthorized' });
+      return;
+    }
+
+    const ownedHostelIds = await getUserHostelIds(userId);
+    if (ownedHostelIds.length === 0) {
+      res.status(403).json({ error: 'Access denied' });
       return;
     }
 
@@ -153,7 +205,12 @@ router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const { error } = await supabase.from('rooms').delete().eq('id', id);
+    const { error } = await supabase
+      .from('rooms')
+      .delete()
+      .eq('id', id)
+      .in('hostel_id', ownedHostelIds);
+
     if (error) throw error;
 
     console.log(`🗑️ [Supabase DB] Deleted Room ID: ${id}`);

@@ -1,17 +1,40 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../db/supabase.js';
-import { isUUID, resolveHostelId } from '../utils/uuid.js';
+import { isUUID } from '../utils/uuid.js';
+import { authMiddleware } from '../middleware/auth.js';
+import { getUserHostelIds } from '../utils/hostelScope.js';
 
 const router = Router();
 
-// GET payments
+// Enforce authentication on all payment routes
+router.use(authMiddleware);
+
+// GET payments (strictly scoped to authenticated user's hostels)
 router.get('/', async (req: Request, res: Response): Promise<void> => {
   try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const ownedHostelIds = await getUserHostelIds(userId);
+    if (ownedHostelIds.length === 0) {
+      res.json([]);
+      return;
+    }
+
     const { hostelId } = req.query;
 
     let query = supabase.from('payments').select('*').order('date', { ascending: false });
     if (hostelId && hostelId !== 'all' && isUUID(hostelId)) {
+      if (!ownedHostelIds.includes(String(hostelId))) {
+        res.json([]);
+        return;
+      }
       query = query.eq('hostel_id', hostelId);
+    } else {
+      query = query.in('hostel_id', ownedHostelIds);
     }
 
     const { data, error } = await query;
@@ -37,9 +60,21 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// POST record payment
+// POST record payment (strictly in an owned hostel)
 router.post('/', async (req: Request, res: Response): Promise<void> => {
   try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const ownedHostelIds = await getUserHostelIds(userId);
+    if (ownedHostelIds.length === 0) {
+      res.status(400).json({ error: 'You must register a hostel property before recording payments.' });
+      return;
+    }
+
     const { hostelId, tenantId, tenantName, roomNumber, amount, method, type, notes, date } = req.body;
 
     if (!tenantName || !amount) {
@@ -47,7 +82,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const targetHostelId = await resolveHostelId(hostelId);
+    const targetHostelId = isUUID(hostelId) && ownedHostelIds.includes(String(hostelId))
+      ? String(hostelId)
+      : ownedHostelIds[0];
 
     const { data: payment, error } = await supabase
       .from('payments')

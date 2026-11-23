@@ -7,6 +7,9 @@ import { Hostel, HostelPortfolioSummary } from '../types/hostel.js';
 
 const router = Router();
 
+// Enforce authentication on all hostel management routes
+router.use(authMiddleware);
+
 // In-memory store fallback when Supabase is in local/mock mode (starts clean)
 let demoHostels: Hostel[] = [];
 
@@ -103,12 +106,25 @@ router.get('/portfolio/summary', async (req: Request, res: Response): Promise<vo
   }
 });
 
-// 2. List all hostels
+// 2. List all hostels owned by the authenticated user
 router.get('/', async (req: Request, res: Response): Promise<void> => {
   try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const isMock = !process.env.SUPABASE_URL || process.env.SUPABASE_URL.includes('your-project') || process.env.SUPABASE_URL.includes('placeholder');
+    if (isMock) {
+      res.json(demoHostels.filter((h) => h.owner_id === userId));
+      return;
+    }
+
     const { data, error } = await supabase
       .from('hostels')
       .select('*')
+      .eq('owner_id', userId)
       .order('created_at', { ascending: true });
 
     if (error) throw error;
@@ -119,10 +135,14 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// 3. Create a new hostel branch
+// 3. Create a new hostel branch for authenticated user
 router.post('/', async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = req.user?.id || 'user_default';
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized: User authentication required' });
+      return;
+    }
     const { name, code, type, address, city, state, pincode, contact_phone, contact_email, monthly_target_revenue } = req.body;
 
     if (!name || !code || !type || !address || !city) {
@@ -133,11 +153,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     const isMock = !process.env.SUPABASE_URL || process.env.SUPABASE_URL.includes('your-project') || process.env.SUPABASE_URL.includes('placeholder');
 
     const generatedId = crypto.randomUUID();
-    const validOwnerId = userId && isUUID(userId) ? userId : null;
 
     const newHostel: Hostel = {
       id: generatedId,
-      owner_id: validOwnerId as any,
+      owner_id: userId,
       name,
       code: code.toUpperCase(),
       type: type || 'Boys',
@@ -171,10 +190,11 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// 4. Get a specific hostel by ID
+// 4. Get a specific hostel by ID (scoped to owner)
 router.get('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    const userId = req.user?.id;
     if (!isUUID(id)) {
       res.status(404).json({ error: 'Hostel not found' });
       return;
@@ -182,7 +202,7 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
     const isMock = !process.env.SUPABASE_URL || process.env.SUPABASE_URL.includes('your-project') || process.env.SUPABASE_URL.includes('placeholder');
 
     if (isMock) {
-      const found = demoHostels.find((h) => h.id === id);
+      const found = demoHostels.find((h) => h.id === id && h.owner_id === userId);
       if (!found) {
         res.status(404).json({ error: 'Hostel not found' });
         return;
@@ -195,6 +215,7 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
       .from('hostels')
       .select('*')
       .eq('id', id)
+      .eq('owner_id', userId)
       .single();
 
     if (error || !data) {
@@ -209,16 +230,17 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// 5. Update a hostel branch
+// 5. Update a hostel branch (scoped to owner)
 router.put('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    const userId = req.user?.id;
     const updates = req.body;
 
     const isMock = !process.env.SUPABASE_URL || process.env.SUPABASE_URL.includes('your-project') || process.env.SUPABASE_URL.includes('placeholder');
 
     if (isMock) {
-      const idx = demoHostels.findIndex((h) => h.id === id);
+      const idx = demoHostels.findIndex((h) => h.id === id && h.owner_id === userId);
       if (idx === -1) {
         res.status(404).json({ error: 'Hostel not found' });
         return;
@@ -232,6 +254,7 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
       .from('hostels')
       .update(updates)
       .eq('id', id)
+      .eq('owner_id', userId)
       .select()
       .single();
 
@@ -243,10 +266,11 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// 6. Delete a hostel branch
+// 6. Delete a hostel branch (scoped to owner)
 router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    const userId = req.user?.id;
     if (!isUUID(id)) {
       res.status(404).json({ error: 'Hostel not found' });
       return;
@@ -254,12 +278,17 @@ router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
     const isMock = !process.env.SUPABASE_URL || process.env.SUPABASE_URL.includes('your-project') || process.env.SUPABASE_URL.includes('placeholder');
 
     if (isMock) {
-      demoHostels = demoHostels.filter((h) => h.id !== id);
+      demoHostels = demoHostels.filter((h) => !(h.id === id && h.owner_id === userId));
       res.json({ success: true, message: 'Hostel deleted successfully' });
       return;
     }
 
-    const { error } = await supabase.from('hostels').delete().eq('id', id);
+    const { error } = await supabase
+      .from('hostels')
+      .delete()
+      .eq('id', id)
+      .eq('owner_id', userId);
+
     if (error) throw error;
 
     res.json({ success: true, message: 'Hostel deleted successfully' });
