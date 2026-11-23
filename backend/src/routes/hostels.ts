@@ -104,25 +104,16 @@ router.get('/portfolio/summary', async (req: Request, res: Response): Promise<vo
   }
 });
 
-// 2. List all hostels for current user
+// 2. List all hostels
 router.get('/', async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = req.user?.id;
-    const isMock = !process.env.SUPABASE_URL || process.env.SUPABASE_URL.includes('your-project') || process.env.SUPABASE_URL.includes('placeholder');
-
-    if (isMock) {
-      res.json(demoHostels);
-      return;
-    }
-
     const { data, error } = await supabase
       .from('hostels')
       .select('*')
-      .eq('owner_id', userId)
       .order('created_at', { ascending: true });
 
     if (error) throw error;
-    res.json(data);
+    res.json(data || []);
   } catch (error) {
     console.error('Error listing hostels:', error);
     res.status(500).json({ error: 'Failed to list hostels' });

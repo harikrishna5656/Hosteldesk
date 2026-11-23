@@ -25,7 +25,7 @@ router.post('/signup', async (req: Request, res: Response): Promise<void> => {
   }
 
   try {
-    const { user } = registerUser(name, email, password);
+    const { user } = await registerUser(name, email, password);
 
     const jwtSecret = process.env.JWT_SECRET || 'secret';
     const expiresIn = process.env.JWT_EXPIRES_IN || '7d';
@@ -52,7 +52,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
   }
 
   try {
-    const user = verifyUser(email, password);
+    const user = await verifyUser(email, password);
 
     const jwtSecret = process.env.JWT_SECRET || 'secret';
     const expiresIn = process.env.JWT_EXPIRES_IN || '7d';

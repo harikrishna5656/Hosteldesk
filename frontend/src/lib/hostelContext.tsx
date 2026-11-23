@@ -12,6 +12,10 @@ import {
   expenses as initialExpenses,
 } from "./mockData";
 
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  (typeof window !== "undefined" && window.location.hostname === "localhost" ? "http://localhost:3001" : "");
+
 interface HostelContextType {
   hostels: Hostel[];
   activeHostelId: string | "all";
@@ -19,7 +23,7 @@ interface HostelContextType {
   isPortfolioView: boolean;
   setActiveHostelId: (id: string | "all") => void;
   addHostel: (hostel: Omit<Hostel, "id">) => void;
-  
+
   // Scoped Data Collections
   rooms: Room[];
   allRooms: Room[];
@@ -42,11 +46,12 @@ interface HostelContextType {
 
   addPayment: (payment: Omit<Payment, "id" | "hostelId"> & { hostelId?: string }) => void;
   addExpense: (expense: Omit<Expense, "id" | "hostelId"> & { hostelId?: string }) => void;
+  refreshData: () => Promise<void>;
 }
 
 const HostelContext = createContext<HostelContextType | undefined>(undefined);
 
-// Helper to detect and purge legacy mock seeds from previous sessions
+// Helper to detect and purge legacy mock seeds
 const isLegacySeed = (list: any[]) =>
   Array.isArray(list) &&
   list.some(
@@ -139,7 +144,7 @@ export function HostelProvider({ children }: { children: React.ReactNode }) {
     return initialExpenses;
   });
 
-  // Synchronize state with LocalStorage
+  // Synchronize state with LocalStorage for instant UI render
   useEffect(() => {
     try {
       localStorage.setItem("hostelpms_hostels", JSON.stringify(hostels));
@@ -151,107 +156,209 @@ export function HostelProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }, [hostels, activeHostelId, roomsList, tenantsList, paymentsList, expensesList]);
 
+  // LIVE DATABASE FETCH FUNCTION
+  const refreshData = useCallback(async () => {
+    if (!API_URL) return;
+
+    try {
+      // 1. Fetch Hostels from Supabase
+      const hRes = await fetch(`${API_URL}/api/hostels`);
+      if (hRes.ok) {
+        const hData = await hRes.json();
+        if (Array.isArray(hData) && hData.length > 0) {
+          setHostels((prev) => {
+            const map = new Map();
+            hData.forEach((h) => map.set(h.id, h));
+            prev.forEach((h) => {
+              if (!map.has(h.id)) map.set(h.id, h);
+            });
+            return Array.from(map.values());
+          });
+        }
+      }
+
+      // 2. Fetch Rooms from Supabase
+      const rRes = await fetch(`${API_URL}/api/rooms?hostelId=${activeHostelId}`);
+      if (rRes.ok) {
+        const rData = await rRes.json();
+        if (Array.isArray(rData)) {
+          setRoomsList(rData);
+        }
+      }
+
+      // 3. Fetch Tenants from Supabase
+      const tRes = await fetch(`${API_URL}/api/tenants?hostelId=${activeHostelId}`);
+      if (tRes.ok) {
+        const tData = await tRes.json();
+        if (Array.isArray(tData)) {
+          setTenantsList(tData);
+        }
+      }
+
+      // 4. Fetch Payments from Supabase
+      const pRes = await fetch(`${API_URL}/api/payments?hostelId=${activeHostelId}`);
+      if (pRes.ok) {
+        const pData = await pRes.json();
+        if (Array.isArray(pData)) {
+          setPaymentsList(pData);
+        }
+      }
+
+      // 5. Fetch Expenses from Supabase
+      const eRes = await fetch(`${API_URL}/api/expenses?hostelId=${activeHostelId}`);
+      if (eRes.ok) {
+        const eData = await eRes.json();
+        if (Array.isArray(eData)) {
+          setExpensesList(eData);
+        }
+      }
+    } catch (err) {
+      console.warn("[HostelContext] Live API sync offline/unreachable, continuing with local cache:", err);
+    }
+  }, [activeHostelId]);
+
+  // Trigger live API fetch on mount and whenever active property switches
+  useEffect(() => {
+    refreshData();
+  }, [refreshData]);
+
+  // Fallback active property
+  useEffect(() => {
+    if (activeHostelId !== "all" && hostels.length > 0 && !hostels.some((h) => h.id === activeHostelId)) {
+      setActiveHostelIdState("all");
+    }
+  }, [hostels, activeHostelId]);
+
   const setActiveHostelId = useCallback((id: string | "all") => {
     setActiveHostelIdState(id);
   }, []);
 
-  const activeHostel = useMemo(() => {
-    if (activeHostelId === "all") return null;
-    return hostels.find((h) => h.id === activeHostelId) || hostels[0] || null;
-  }, [hostels, activeHostelId]);
-
   const isPortfolioView = activeHostelId === "all";
 
-  // Filtered scoped collections
-  const currentHostelId = activeHostel?.id || hostels[0]?.id || "";
+  const activeHostel = useMemo(() => {
+    if (activeHostelId === "all") return null;
+    return hostels.find((h) => h.id === activeHostelId) || null;
+  }, [hostels, activeHostelId]);
 
-  const rooms = useMemo(() => {
-    const list = isPortfolioView ? roomsList : roomsList.filter((r) => r.hostelId === activeHostelId);
-    return list.map((r) => {
-      const activeCount = tenantsList.filter(
-        (t) =>
-          (!t.hostelId || t.hostelId === r.hostelId) &&
-          t.roomNumber === r.number &&
-          t.status !== "left"
-      ).length;
-      const actualOccupied = Math.max(r.occupied, activeCount);
+  const currentHostelId = useMemo(() => {
+    return activeHostelId === "all" ? hostels[0]?.id : activeHostelId;
+  }, [activeHostelId, hostels]);
+
+  // Dynamically reconcile room occupied count with active residents
+  const reconciledRoomsList = useMemo(() => {
+    return roomsList.map((room) => {
+      const activeResidentsInRoom = tenantsList.filter(
+        (tenant) =>
+          (!tenant.hostelId || !room.hostelId || tenant.hostelId === room.hostelId) &&
+          String(tenant.roomNumber).trim() === String(room.number).trim() &&
+          tenant.status !== "left"
+      );
+      const computedOccupied = Math.min(room.capacity, Math.max(room.occupied || 0, activeResidentsInRoom.length));
       const status: Room["status"] =
-        r.status === "maintenance"
+        room.status === "maintenance"
           ? "maintenance"
-          : actualOccupied >= r.capacity
+          : computedOccupied >= room.capacity
           ? "occupied"
           : "available";
-      return {
-        ...r,
-        occupied: actualOccupied,
-        status,
-      };
-    });
-  }, [roomsList, tenantsList, activeHostelId, isPortfolioView]);
 
-  const allRooms = useMemo(() => {
-    return roomsList.map((r) => {
-      const activeCount = tenantsList.filter(
-        (t) =>
-          (!t.hostelId || t.hostelId === r.hostelId) &&
-          t.roomNumber === r.number &&
-          t.status !== "left"
-      ).length;
-      const actualOccupied = Math.max(r.occupied, activeCount);
-      const status: Room["status"] =
-        r.status === "maintenance"
-          ? "maintenance"
-          : actualOccupied >= r.capacity
-          ? "occupied"
-          : "available";
       return {
-        ...r,
-        occupied: actualOccupied,
+        ...room,
+        occupied: computedOccupied,
         status,
       };
     });
   }, [roomsList, tenantsList]);
 
+  // Filtered collections
+  const rooms = useMemo(() => {
+    if (activeHostelId === "all") return reconciledRoomsList;
+    return reconciledRoomsList.filter((r) => r.hostelId === activeHostelId);
+  }, [reconciledRoomsList, activeHostelId]);
+
   const tenants = useMemo(() => {
-    if (isPortfolioView) return tenantsList;
+    if (activeHostelId === "all") return tenantsList;
     return tenantsList.filter((t) => t.hostelId === activeHostelId);
-  }, [tenantsList, activeHostelId, isPortfolioView]);
+  }, [tenantsList, activeHostelId]);
 
   const payments = useMemo(() => {
-    if (isPortfolioView) return paymentsList;
+    if (activeHostelId === "all") return paymentsList;
     return paymentsList.filter((p) => p.hostelId === activeHostelId);
-  }, [paymentsList, activeHostelId, isPortfolioView]);
+  }, [paymentsList, activeHostelId]);
 
   const expenses = useMemo(() => {
-    if (isPortfolioView) return expensesList;
+    if (activeHostelId === "all") return expensesList;
     return expensesList.filter((e) => e.hostelId === activeHostelId);
-  }, [expensesList, activeHostelId, isPortfolioView]);
+  }, [expensesList, activeHostelId]);
 
-  // Mutations
-  const addHostel = useCallback((newHostelData: Omit<Hostel, "id">) => {
-    const newHostel: Hostel = {
-      ...newHostelData,
-      id: "h_" + Date.now(),
-    };
-    setHostels((prev) => [...prev, newHostel]);
-    setActiveHostelIdState(newHostel.id);
-  }, []);
+  // MUTATIONS (Optimistic UI update + Live Backend/Supabase API sync)
+
+  const addHostel = useCallback(
+    async (newHostelData: Omit<Hostel, "id">) => {
+      const newHostel: Hostel = {
+        ...newHostelData,
+        id: "h_" + Date.now(),
+      };
+      setHostels((prev) => [...prev, newHostel]);
+      setActiveHostelIdState(newHostel.id);
+
+      if (API_URL) {
+        try {
+          const res = await fetch(`${API_URL}/api/hostels`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(newHostelData),
+          });
+          if (res.ok) {
+            const saved = await res.json();
+            setHostels((prev) => prev.map((h) => (h.id === newHostel.id ? saved : h)));
+            setActiveHostelIdState(saved.id);
+          }
+        } catch {}
+      }
+    },
+    []
+  );
 
   const addRoom = useCallback(
-    (roomData: Omit<Room, "id" | "hostelId"> & { hostelId?: string }) => {
+    async (roomData: Omit<Room, "id" | "hostelId"> & { hostelId?: string }) => {
       const targetHostelId = roomData.hostelId || currentHostelId || hostels[0]?.id || "";
+      const tempId = "r_" + Date.now();
       const newRoom: Room = {
         ...roomData,
-        id: "r_" + Date.now(),
+        id: tempId,
         hostelId: targetHostelId,
       };
       setRoomsList((prev) => [...prev, newRoom]);
+
+      if (API_URL) {
+        try {
+          const res = await fetch(`${API_URL}/api/rooms`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...roomData, hostelId: targetHostelId }),
+          });
+          if (res.ok) {
+            const saved = await res.json();
+            setRoomsList((prev) => prev.map((r) => (r.id === tempId ? saved : r)));
+          }
+        } catch {}
+      }
     },
     [currentHostelId, hostels]
   );
 
-  const updateRoom = useCallback((room: Room) => {
+  const updateRoom = useCallback(async (room: Room) => {
     setRoomsList((prev) => prev.map((r) => (r.id === room.id ? room : r)));
+
+    if (API_URL && !room.id.startsWith("r_")) {
+      try {
+        await fetch(`${API_URL}/api/rooms/${room.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(room),
+        });
+      } catch {}
+    }
   }, []);
 
   const canDeleteRoom = useCallback(
@@ -261,7 +368,7 @@ export function HostelProvider({ children }: { children: React.ReactNode }) {
       const activeTenantsInRoom = tenantsList.filter(
         (t) =>
           (!t.hostelId || t.hostelId === room.hostelId) &&
-          t.roomNumber === room.number &&
+          String(t.roomNumber) === String(room.number) &&
           t.status !== "left"
       );
       if (room.occupied > 0 || activeTenantsInRoom.length > 0) {
@@ -284,27 +391,32 @@ export function HostelProvider({ children }: { children: React.ReactNode }) {
         return { success: false, error: check.reason };
       }
       setRoomsList((prev) => prev.filter((r) => r.id !== id));
+
+      if (API_URL && !id.startsWith("r_")) {
+        fetch(`${API_URL}/api/rooms/${id}`, { method: "DELETE" }).catch(() => {});
+      }
       return { success: true };
     },
     [canDeleteRoom]
   );
 
   const addTenant = useCallback(
-    (tenantData: Omit<Tenant, "id" | "hostelId"> & { hostelId?: string }) => {
+    async (tenantData: Omit<Tenant, "id" | "hostelId"> & { hostelId?: string }) => {
       const targetHostelId = tenantData.hostelId || currentHostelId || hostels[0]?.id || "";
+      const tempId = "t_" + Date.now();
       const newTenant: Tenant = {
         ...tenantData,
-        id: "t_" + Date.now(),
+        id: tempId,
         hostelId: targetHostelId,
       };
 
-      // 1. Add tenant to list
-      setTenantsList((prev) => [...prev, newTenant]);
+      // Optimistic update
+      setTenantsList((prev) => [newTenant, ...prev]);
 
-      // 2. Automatically update corresponding room's occupied bed count and occupancy status
+      // Automatically update room's occupied bed count
       setRoomsList((prev) =>
         prev.map((r) => {
-          if (r.hostelId === targetHostelId && r.number === newTenant.roomNumber) {
+          if (r.hostelId === targetHostelId && String(r.number) === String(newTenant.roomNumber)) {
             const newOccupied = r.occupied + 1;
             const newStatus =
               r.status === "maintenance"
@@ -321,20 +433,51 @@ export function HostelProvider({ children }: { children: React.ReactNode }) {
           return r;
         })
       );
+
+      // Auto record advance if paid
+      if (newTenant.advancePaid && Number(newTenant.advanceAmount) > 0) {
+        const advancePayment: Payment = {
+          id: "p_adv_" + Date.now(),
+          hostelId: targetHostelId,
+          tenantName: newTenant.name,
+          roomNumber: newTenant.roomNumber,
+          amount: Number(newTenant.advanceAmount),
+          method: "UPI",
+          type: "Advance",
+          notes: "Security Deposit advance paid during check-in",
+          date: new Date().toISOString().split("T")[0],
+        };
+        setPaymentsList((prev) => [advancePayment, ...prev]);
+      }
+
+      // Live Backend / Supabase API Call
+      if (API_URL) {
+        try {
+          const res = await fetch(`${API_URL}/api/tenants`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...tenantData, hostelId: targetHostelId }),
+          });
+          if (res.ok) {
+            const saved = await res.json();
+            setTenantsList((prev) => prev.map((t) => (t.id === tempId ? { ...saved, ...t, id: saved.id } : t)));
+          }
+        } catch {}
+      }
     },
     [currentHostelId, hostels]
   );
 
-  const updateTenant = useCallback((updatedTenant: Tenant) => {
+  const updateTenant = useCallback(async (updatedTenant: Tenant) => {
     setTenantsList((prev) => {
       const oldTenant = prev.find((t) => t.id === updatedTenant.id);
 
-      // Check if checkout occurred (active / checkout-pending -> left)
+      // Check if checkout occurred
       if (oldTenant && oldTenant.status !== "left" && updatedTenant.status === "left") {
         setRoomsList((rooms) =>
           rooms.map((r) => {
             const matchesHostel = !updatedTenant.hostelId || r.hostelId === updatedTenant.hostelId;
-            if (matchesHostel && r.number === updatedTenant.roomNumber) {
+            if (matchesHostel && String(r.number) === String(updatedTenant.roomNumber)) {
               const newOccupied = Math.max(0, r.occupied - 1);
               const newStatus =
                 r.status === "maintenance"
@@ -353,38 +496,18 @@ export function HostelProvider({ children }: { children: React.ReactNode }) {
         );
       }
 
-      // Check if room transfer occurred (e.g. moved from Room 101 to Room 102)
-      if (
-        oldTenant &&
-        oldTenant.status !== "left" &&
-        updatedTenant.status !== "left" &&
-        (oldTenant.roomNumber !== updatedTenant.roomNumber || oldTenant.hostelId !== updatedTenant.hostelId)
-      ) {
-        setRoomsList((rooms) =>
-          rooms.map((r) => {
-            if (r.hostelId === oldTenant.hostelId && r.number === oldTenant.roomNumber) {
-              const newOccupied = Math.max(0, r.occupied - 1);
-              return {
-                ...r,
-                occupied: newOccupied,
-                status: r.status === "maintenance" ? "maintenance" : newOccupied >= r.capacity ? "occupied" : "available",
-              };
-            }
-            if (r.hostelId === updatedTenant.hostelId && r.number === updatedTenant.roomNumber) {
-              const newOccupied = r.occupied + 1;
-              return {
-                ...r,
-                occupied: newOccupied,
-                status: r.status === "maintenance" ? "maintenance" : newOccupied >= r.capacity ? "occupied" : "available",
-              };
-            }
-            return r;
-          })
-        );
-      }
-
       return prev.map((t) => (t.id === updatedTenant.id ? updatedTenant : t));
     });
+
+    if (API_URL && !updatedTenant.id.startsWith("t_")) {
+      try {
+        await fetch(`${API_URL}/api/tenants/${updatedTenant.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updatedTenant),
+        });
+      } catch {}
+    }
   }, []);
 
   const deleteTenant = useCallback((id: string) => {
@@ -394,12 +517,18 @@ export function HostelProvider({ children }: { children: React.ReactNode }) {
         setRoomsList((rooms) =>
           rooms.map((r) => {
             const matchesHostel = !tenantToDelete.hostelId || r.hostelId === tenantToDelete.hostelId;
-            if (matchesHostel && r.number === tenantToDelete.roomNumber) {
+            if (matchesHostel && String(r.number) === String(tenantToDelete.roomNumber)) {
               const newOccupied = Math.max(0, r.occupied - 1);
+              const newStatus =
+                r.status === "maintenance"
+                  ? "maintenance"
+                  : newOccupied >= r.capacity
+                  ? "occupied"
+                  : "available";
               return {
                 ...r,
                 occupied: newOccupied,
-                status: r.status === "maintenance" ? "maintenance" : newOccupied >= r.capacity ? "occupied" : "available",
+                status: newStatus,
               };
             }
             return r;
@@ -408,30 +537,64 @@ export function HostelProvider({ children }: { children: React.ReactNode }) {
       }
       return prev.filter((t) => t.id !== id);
     });
+
+    if (API_URL && !id.startsWith("t_")) {
+      fetch(`${API_URL}/api/tenants/${id}`, { method: "DELETE" }).catch(() => {});
+    }
   }, []);
 
   const addPayment = useCallback(
-    (paymentData: Omit<Payment, "id" | "hostelId"> & { hostelId?: string }) => {
+    async (paymentData: Omit<Payment, "id" | "hostelId"> & { hostelId?: string }) => {
       const targetHostelId = paymentData.hostelId || currentHostelId || hostels[0]?.id || "";
+      const tempId = "p_" + Date.now();
       const newPayment: Payment = {
         ...paymentData,
-        id: "p_" + Date.now(),
+        id: tempId,
         hostelId: targetHostelId,
       };
       setPaymentsList((prev) => [newPayment, ...prev]);
+
+      if (API_URL) {
+        try {
+          const res = await fetch(`${API_URL}/api/payments`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...paymentData, hostelId: targetHostelId }),
+          });
+          if (res.ok) {
+            const saved = await res.json();
+            setPaymentsList((prev) => prev.map((p) => (p.id === tempId ? saved : p)));
+          }
+        } catch {}
+      }
     },
     [currentHostelId, hostels]
   );
 
   const addExpense = useCallback(
-    (expenseData: Omit<Expense, "id" | "hostelId"> & { hostelId?: string }) => {
+    async (expenseData: Omit<Expense, "id" | "hostelId"> & { hostelId?: string }) => {
       const targetHostelId = expenseData.hostelId || currentHostelId || hostels[0]?.id || "";
+      const tempId = "e_" + Date.now();
       const newExpense: Expense = {
         ...expenseData,
-        id: "e_" + Date.now(),
+        id: tempId,
         hostelId: targetHostelId,
       };
       setExpensesList((prev) => [newExpense, ...prev]);
+
+      if (API_URL) {
+        try {
+          const res = await fetch(`${API_URL}/api/expenses`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...expenseData, hostelId: targetHostelId }),
+          });
+          if (res.ok) {
+            const saved = await res.json();
+            setExpensesList((prev) => prev.map((e) => (e.id === tempId ? saved : e)));
+          }
+        } catch {}
+      }
     },
     [currentHostelId, hostels]
   );
@@ -462,6 +625,7 @@ export function HostelProvider({ children }: { children: React.ReactNode }) {
         deleteTenant,
         addPayment,
         addExpense,
+        refreshData,
       }}
     >
       {children}

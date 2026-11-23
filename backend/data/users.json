@@ -1,1 +1,16 @@
-[]
+[
+  {
+    "id": "user_01339bc9-4966-4881-8a77-def7c2d0b6fd",
+    "name": "sushanth",
+    "email": "sushanth@gmail.com",
+    "passwordHash": "858258a1b9ec480cf82cb45a85f11d2a406fc45e3068b906d50b0af951747d44",
+    "createdAt": "2026-11-23T09:15:22.338Z"
+  },
+  {
+    "id": "1e39c476-b987-4a7b-a606-4bd7d15023ba",
+    "name": "Sri Sai Balaji Owner",
+    "email": "owner@srisaibalaji.com",
+    "passwordHash": "590c8c2a3a1989aa86fc0d70e2355efcbbbd6e41c7e8ea016d862cfb3e8c45ce",
+    "createdAt": "2026-11-23T09:50:03.60502+00:00"
+  }
+]
