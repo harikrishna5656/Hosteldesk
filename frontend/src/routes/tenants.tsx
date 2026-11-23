@@ -128,7 +128,10 @@ function TenantsPage() {
 
     // Attempt to deliver live email via backend Nodemailer service
     try {
-      const res = await fetch("http://localhost:3001/api/email/rent-reminder", {
+      const apiUrl =
+        import.meta.env.VITE_API_URL ||
+        (typeof window !== "undefined" && window.location.hostname === "localhost" ? "http://localhost:3001" : "");
+      const res = await fetch(`${apiUrl}/api/email/rent-reminder`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
