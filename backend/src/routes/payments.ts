@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../db/supabase.js';
+import { isUUID, resolveHostelId } from '../utils/uuid.js';
 
 const router = Router();
 
@@ -9,7 +10,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     const { hostelId } = req.query;
 
     let query = supabase.from('payments').select('*').order('date', { ascending: false });
-    if (hostelId && hostelId !== 'all') {
+    if (hostelId && hostelId !== 'all' && isUUID(hostelId)) {
       query = query.eq('hostel_id', hostelId);
     }
 
@@ -41,16 +42,18 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   try {
     const { hostelId, tenantId, tenantName, roomNumber, amount, method, type, notes, date } = req.body;
 
-    if (!hostelId || !tenantName || !amount) {
-      res.status(400).json({ error: 'hostelId, tenantName, and amount are required' });
+    if (!tenantName || !amount) {
+      res.status(400).json({ error: 'tenantName and amount are required' });
       return;
     }
+
+    const targetHostelId = await resolveHostelId(hostelId);
 
     const { data: payment, error } = await supabase
       .from('payments')
       .insert({
-        hostel_id: hostelId,
-        tenant_id: tenantId || null,
+        hostel_id: targetHostelId,
+        tenant_id: isUUID(tenantId) ? tenantId : null,
         tenant_name: tenantName,
         room_number: String(roomNumber || ''),
         amount: Number(amount),

@@ -1,12 +1,11 @@
 import { Router, Request, Response } from 'express';
+import crypto from 'crypto';
 import { supabase } from '../db/supabase.js';
 import { authMiddleware } from '../middleware/auth.js';
+import { isUUID } from '../utils/uuid.js';
 import { Hostel, HostelPortfolioSummary } from '../types/hostel.js';
 
 const router = Router();
-
-// Apply auth middleware to all hostel routes
-router.use(authMiddleware);
 
 // In-memory store fallback when Supabase is in local/mock mode (starts clean)
 let demoHostels: Hostel[] = [];
@@ -133,9 +132,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 
     const isMock = !process.env.SUPABASE_URL || process.env.SUPABASE_URL.includes('your-project') || process.env.SUPABASE_URL.includes('placeholder');
 
+    const generatedId = crypto.randomUUID();
+    const validOwnerId = userId && isUUID(userId) ? userId : null;
+
     const newHostel: Hostel = {
-      id: 'h_' + Date.now(),
-      owner_id: userId,
+      id: generatedId,
+      owner_id: validOwnerId as any,
       name,
       code: code.toUpperCase(),
       type: type || 'Boys',
@@ -173,6 +175,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 router.get('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    if (!isUUID(id)) {
+      res.status(404).json({ error: 'Hostel not found' });
+      return;
+    }
     const isMock = !process.env.SUPABASE_URL || process.env.SUPABASE_URL.includes('your-project') || process.env.SUPABASE_URL.includes('placeholder');
 
     if (isMock) {
@@ -241,6 +247,10 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
 router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    if (!isUUID(id)) {
+      res.status(404).json({ error: 'Hostel not found' });
+      return;
+    }
     const isMock = !process.env.SUPABASE_URL || process.env.SUPABASE_URL.includes('your-project') || process.env.SUPABASE_URL.includes('placeholder');
 
     if (isMock) {

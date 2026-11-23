@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../db/supabase.js';
-import { authMiddleware } from '../middleware/auth.js';
+import { isUUID, resolveHostelId } from '../utils/uuid.js';
 
 const router = Router();
 
@@ -10,7 +10,9 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     const { hostelId } = req.query;
 
     let query = supabase.from('rooms').select('*').order('room_number', { ascending: true });
-    if (hostelId && hostelId !== 'all') {
+    
+    // Only apply hostel_id filter if it's a valid UUID
+    if (hostelId && hostelId !== 'all' && isUUID(hostelId)) {
       query = query.eq('hostel_id', hostelId);
     }
 
@@ -42,15 +44,17 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   try {
     const { hostelId, number, type, capacity, rent, floor, status } = req.body;
 
-    if (!hostelId || !number || rent === undefined) {
-      res.status(400).json({ error: 'hostelId, room number, and rent are required' });
+    if (!number || rent === undefined) {
+      res.status(400).json({ error: 'room number and rent are required' });
       return;
     }
+
+    const targetHostelId = await resolveHostelId(hostelId);
 
     const { data, error } = await supabase
       .from('rooms')
       .insert({
-        hostel_id: hostelId,
+        hostel_id: targetHostelId,
         room_number: String(number),
         type: type || 'Double',
         capacity: Number(capacity) || 1,
@@ -86,6 +90,11 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 router.put('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    if (!isUUID(id)) {
+      res.status(400).json({ error: 'Invalid room UUID' });
+      return;
+    }
+
     const { number, type, capacity, occupied, rent, floor, status } = req.body;
 
     const updates: Record<string, any> = {};
@@ -127,6 +136,10 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
 router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    if (!isUUID(id)) {
+      res.status(400).json({ error: 'Invalid room UUID' });
+      return;
+    }
 
     // Check if active tenants exist in this room
     const { data: activeTenants } = await supabase

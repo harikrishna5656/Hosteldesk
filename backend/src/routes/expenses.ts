@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../db/supabase.js';
+import { isUUID, resolveHostelId } from '../utils/uuid.js';
 
 const router = Router();
 
@@ -9,7 +10,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     const { hostelId } = req.query;
 
     let query = supabase.from('expenses').select('*').order('date', { ascending: false });
-    if (hostelId && hostelId !== 'all') {
+    if (hostelId && hostelId !== 'all' && isUUID(hostelId)) {
       query = query.eq('hostel_id', hostelId);
     }
 
@@ -37,15 +38,17 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   try {
     const { hostelId, date, category, amount, note } = req.body;
 
-    if (!hostelId || !category || amount === undefined) {
-      res.status(400).json({ error: 'hostelId, category, and amount are required' });
+    if (!category || amount === undefined) {
+      res.status(400).json({ error: 'category and amount are required' });
       return;
     }
+
+    const targetHostelId = await resolveHostelId(hostelId);
 
     const { data: expense, error } = await supabase
       .from('expenses')
       .insert({
-        hostel_id: hostelId,
+        hostel_id: targetHostelId,
         date: date || new Date().toISOString().split('T')[0],
         category: category,
         amount: Number(amount),

@@ -184,3 +184,31 @@ export async function verifyUser(email: string, password: string): Promise<Omit<
   const { passwordHash: _, ...publicUser } = user;
   return publicUser;
 }
+
+export async function findUserByEmail(email: string): Promise<Omit<StoredUser, 'passwordHash'> | null> {
+  const normalized = email.trim().toLowerCase();
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', normalized)
+        .maybeSingle();
+      if (!error && data) {
+        return {
+          id: data.id,
+          name: data.full_name,
+          email: data.email,
+          createdAt: data.created_at,
+        };
+      }
+    } catch {}
+  }
+  const users = getAllUsers();
+  const found = users.find((u) => u.email.toLowerCase() === normalized);
+  if (found) {
+    const { passwordHash: _, ...publicUser } = found;
+    return publicUser;
+  }
+  return null;
+}

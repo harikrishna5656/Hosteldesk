@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../db/supabase.js';
+import { isUUID, resolveHostelId } from '../utils/uuid.js';
 
 const router = Router();
 
@@ -9,7 +10,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     const { hostelId } = req.query;
 
     let query = supabase.from('tenants').select('*').order('created_at', { ascending: false });
-    if (hostelId && hostelId !== 'all') {
+    if (hostelId && hostelId !== 'all' && isUUID(hostelId)) {
       query = query.eq('hostel_id', hostelId);
     }
 
@@ -72,14 +73,16 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       paid,
     } = req.body;
 
-    if (!hostelId || !name || !phone || !email || !roomNumber) {
-      res.status(400).json({ error: 'hostelId, name, phone, email, and roomNumber are required' });
+    if (!name || !phone || !email || !roomNumber) {
+      res.status(400).json({ error: 'name, phone, email, and roomNumber are required' });
       return;
     }
 
+    const targetHostelId = await resolveHostelId(hostelId);
+
     const insertData: Record<string, any> = {
-      hostel_id: hostelId,
-      room_id: roomId || null,
+      hostel_id: targetHostelId,
+      room_id: isUUID(roomId) ? roomId : null,
       room_number: String(roomNumber),
       name: name.trim(),
       phone: phone.trim(),
@@ -106,7 +109,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     console.log(`✅ [Supabase DB] Check-in Tenant: ${tenant.name} -> Room ${tenant.room_number}`);
 
     // Update room occupancy if roomId is valid
-    if (roomId) {
+    if (isUUID(roomId)) {
       const { data: room } = await supabase.from('rooms').select('occupied, capacity').eq('id', roomId).single();
       if (room) {
         const newOccupied = (room.occupied || 0) + 1;
@@ -118,7 +121,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     // Auto-record advance payment if paid
     if (advancePaid && Number(advanceAmount) > 0) {
       await supabase.from('payments').insert({
-        hostel_id: hostelId,
+        hostel_id: targetHostelId,
         tenant_id: tenant.id,
         tenant_name: tenant.name,
         room_number: tenant.room_number,
@@ -133,7 +136,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     // Auto-record rent payment if marked paid
     if (paid && Number(rentAmount) > 0) {
       await supabase.from('payments').insert({
-        hostel_id: hostelId,
+        hostel_id: targetHostelId,
         tenant_id: tenant.id,
         tenant_name: tenant.name,
         room_number: tenant.room_number,
@@ -171,6 +174,11 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 router.put('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    if (!isUUID(id)) {
+      res.status(400).json({ error: 'Invalid tenant UUID' });
+      return;
+    }
+
     const body = req.body;
 
     const updates: Record<string, any> = {};
@@ -203,7 +211,7 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
     if (error) throw error;
 
     // If tenant vacated / left, decrease room bed occupancy
-    if (body.status === 'left' && tenant.room_id) {
+    if (body.status === 'left' && tenant.room_id && isUUID(tenant.room_id)) {
       const { data: room } = await supabase.from('rooms').select('occupied, capacity').eq('id', tenant.room_id).single();
       if (room && room.occupied > 0) {
         const newOccupied = room.occupied - 1;
@@ -223,9 +231,13 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
 router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
+    if (!isUUID(id)) {
+      res.status(400).json({ error: 'Invalid tenant UUID' });
+      return;
+    }
 
     const { data: tenant } = await supabase.from('tenants').select('room_id').eq('id', id).single();
-    if (tenant?.room_id) {
+    if (tenant?.room_id && isUUID(tenant.room_id)) {
       const { data: room } = await supabase.from('rooms').select('occupied').eq('id', tenant.room_id).single();
       if (room && room.occupied > 0) {
         await supabase.from('rooms').update({ occupied: room.occupied - 1, status: 'available' }).eq('id', tenant.room_id);

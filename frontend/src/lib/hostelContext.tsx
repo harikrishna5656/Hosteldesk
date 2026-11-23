@@ -51,6 +51,20 @@ interface HostelContextType {
 
 const HostelContext = createContext<HostelContextType | undefined>(undefined);
 
+const isUUID = (str: any): boolean =>
+  typeof str === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
+
+const generateUUID = (): string => {
+  if (typeof window !== "undefined" && window.crypto?.randomUUID) {
+    return window.crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
+
 // Helper to detect and purge legacy mock seeds
 const isLegacySeed = (list: any[]) =>
   Array.isArray(list) &&
@@ -60,7 +74,8 @@ const isLegacySeed = (list: any[]) =>
       item?.id === "h_greenvalley" ||
       item?.hostelId === "h_sunrise" ||
       item?.id === "r1" ||
-      item?.id === "t1"
+      item?.id === "t1" ||
+      (typeof item?.id === "string" && item.id.startsWith("h_179"))
   );
 
 export function HostelProvider({ children }: { children: React.ReactNode }) {
@@ -78,12 +93,12 @@ export function HostelProvider({ children }: { children: React.ReactNode }) {
     return initialHostels;
   });
 
-  // 2. Active Hostel Selection ('all' or specific hostel ID)
+  // 2. Active Hostel Selection ('all' or specific hostel UUID)
   const [activeHostelId, setActiveHostelIdState] = useState<string | "all">(() => {
     if (typeof window !== "undefined") {
       try {
         const stored = localStorage.getItem("hostelpms_active_hostel_id");
-        if (stored && stored !== "h_sunrise" && stored !== "h_greenvalley" && stored !== "h_metro") {
+        if (stored && isUUID(stored)) {
           return stored;
         }
       } catch {}
@@ -177,8 +192,10 @@ export function HostelProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
+      const hostelParam = isUUID(activeHostelId) ? `?hostelId=${activeHostelId}` : "";
+
       // 2. Fetch Rooms from Supabase
-      const rRes = await fetch(`${API_URL}/api/rooms?hostelId=${activeHostelId}`);
+      const rRes = await fetch(`${API_URL}/api/rooms${hostelParam}`);
       if (rRes.ok) {
         const rData = await rRes.json();
         if (Array.isArray(rData)) {
@@ -187,7 +204,7 @@ export function HostelProvider({ children }: { children: React.ReactNode }) {
       }
 
       // 3. Fetch Tenants from Supabase
-      const tRes = await fetch(`${API_URL}/api/tenants?hostelId=${activeHostelId}`);
+      const tRes = await fetch(`${API_URL}/api/tenants${hostelParam}`);
       if (tRes.ok) {
         const tData = await tRes.json();
         if (Array.isArray(tData)) {
@@ -196,7 +213,7 @@ export function HostelProvider({ children }: { children: React.ReactNode }) {
       }
 
       // 4. Fetch Payments from Supabase
-      const pRes = await fetch(`${API_URL}/api/payments?hostelId=${activeHostelId}`);
+      const pRes = await fetch(`${API_URL}/api/payments${hostelParam}`);
       if (pRes.ok) {
         const pData = await pRes.json();
         if (Array.isArray(pData)) {
@@ -205,7 +222,7 @@ export function HostelProvider({ children }: { children: React.ReactNode }) {
       }
 
       // 5. Fetch Expenses from Supabase
-      const eRes = await fetch(`${API_URL}/api/expenses?hostelId=${activeHostelId}`);
+      const eRes = await fetch(`${API_URL}/api/expenses${hostelParam}`);
       if (eRes.ok) {
         const eData = await eRes.json();
         if (Array.isArray(eData)) {
@@ -296,7 +313,7 @@ export function HostelProvider({ children }: { children: React.ReactNode }) {
     async (newHostelData: Omit<Hostel, "id">) => {
       const newHostel: Hostel = {
         ...newHostelData,
-        id: "h_" + Date.now(),
+        id: generateUUID(),
       };
       setHostels((prev) => [...prev, newHostel]);
       setActiveHostelIdState(newHostel.id);
