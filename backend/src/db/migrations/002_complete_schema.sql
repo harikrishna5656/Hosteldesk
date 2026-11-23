@@ -220,35 +220,3 @@ CREATE POLICY "Public full access expenses" ON public.expenses FOR ALL USING (tr
 CREATE POLICY "Public full access users" ON public.users FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Public full access hostel_staff" ON public.hostel_staff FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Public full access notifications" ON public.notifications FOR ALL USING (true) WITH CHECK (true);
-
--- ====================================================================
--- 11. INITIAL SEED (Sri Sai Balaji Hostel branch)
--- ====================================================================
-INSERT INTO public.hostels (id, name, code, type, address, city, state, pincode, contact_phone, contact_email, monthly_target_revenue)
-VALUES (
-    'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
-    'Sri Sai Balaji hostel',
-    'RTY-678',
-    'Boys',
-    'Madhapur, Near Metro Station',
-    'Hyderabad',
-    'Telangana',
-    '500081',
-    '+91 98765 43210',
-    'hosteldeskk@gmail.com',
-    50000.00
-) ON CONFLICT (code) DO NOTHING;
-
--- Initial Room Seed (Floor 1 Room 103)
-INSERT INTO public.rooms (id, hostel_id, room_number, type, capacity, occupied, rent, floor, status)
-VALUES (
-    'b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22',
-    'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
-    '103',
-    'Double',
-    2,
-    1,
-    6000.00,
-    1,
-    'available'
-) ON CONFLICT (hostel_id, room_number) DO NOTHING;

@@ -24,6 +24,5 @@ export async function resolveHostelId(hostelId: any): Promise<string> {
     }
   } catch {}
 
-  // Fallback to the seeded Sri Sai Balaji Hostel UUID
-  return 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
+  return '';
 }

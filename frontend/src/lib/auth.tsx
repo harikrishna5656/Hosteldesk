@@ -116,6 +116,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           };
           if (typeof window !== "undefined") {
             localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionUser));
+            // Ensure brand new signup starts completely empty (no previous hostels or rooms)
+            localStorage.removeItem("hostelpms_hostels");
+            localStorage.removeItem("hostelpms_rooms");
+            localStorage.removeItem("hostelpms_tenants");
+            localStorage.removeItem("hostelpms_payments");
+            localStorage.removeItem("hostelpms_expenses");
+            localStorage.removeItem("hostelpms_active_hostel_id");
           }
           setAuth({ isAuthenticated: true, user: sessionUser });
           return { success: true };
@@ -189,6 +196,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           };
           if (typeof window !== "undefined") {
             localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionUser));
+            // Ensure brand new signup starts completely empty (no previous hostels or rooms)
+            localStorage.removeItem("hostelpms_hostels");
+            localStorage.removeItem("hostelpms_rooms");
+            localStorage.removeItem("hostelpms_tenants");
+            localStorage.removeItem("hostelpms_payments");
+            localStorage.removeItem("hostelpms_expenses");
+            localStorage.removeItem("hostelpms_active_hostel_id");
           }
           setAuth({ isAuthenticated: true, user: sessionUser });
           return { success: true };
@@ -236,6 +250,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (typeof window !== "undefined") {
       localStorage.removeItem(SESSION_STORAGE_KEY);
       localStorage.removeItem("hostelhub_auth");
+      localStorage.removeItem("hostelpms_hostels");
+      localStorage.removeItem("hostelpms_rooms");
+      localStorage.removeItem("hostelpms_tenants");
+      localStorage.removeItem("hostelpms_payments");
+      localStorage.removeItem("hostelpms_expenses");
+      localStorage.removeItem("hostelpms_active_hostel_id");
     }
     setAuth({ isAuthenticated: false, user: null });
   }, []);
