@@ -89,9 +89,6 @@ export function AppShell() {
             );
           })}
         </nav>
-        <div className="p-3 border-t border-[#1F1F1F]">
-          <HostelSwitcher compact />
-        </div>
       </aside>
 
       {/* Mobile drawer */}

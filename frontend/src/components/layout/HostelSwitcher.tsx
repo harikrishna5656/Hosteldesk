@@ -3,7 +3,13 @@ import { Building2, ChevronDown, Check, Plus, Layers, MapPin } from "lucide-reac
 import { useHostel } from "@/lib/hostelContext";
 import { AddHostelDialog } from "../dialogs/AddHostelDialog";
 
-export function HostelSwitcher({ compact = false }: { compact?: boolean }) {
+export function HostelSwitcher({
+  compact = false,
+  direction = "down",
+}: {
+  compact?: boolean;
+  direction?: "up" | "down";
+}) {
   const { hostels, activeHostelId, activeHostel, isPortfolioView, setActiveHostelId, allRooms } = useHostel();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -73,8 +79,10 @@ export function HostelSwitcher({ compact = false }: { compact?: boolean }) {
       {dropdownOpen && (
         <div
           className={`absolute left-0 ${
-            compact ? "bottom-full mb-2" : "top-full mt-2"
-          } w-72 rounded-2xl bg-card border border-border shadow-2xl z-50 p-2 animate-in fade-in zoom-in-95 duration-150`}
+            direction === "up" ? "bottom-full mb-2" : "top-full mt-2"
+          } ${
+            compact ? "w-full min-w-[260px]" : "w-72"
+          } rounded-2xl bg-card border border-border shadow-2xl z-50 p-2 animate-in fade-in zoom-in-95 duration-150`}
         >
           <div className="px-2.5 py-1.5">
             <p className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
