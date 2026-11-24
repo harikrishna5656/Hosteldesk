@@ -38,6 +38,7 @@ function useDarkMode() {
 export function AppShell() {
   const { dark, toggle } = useDarkMode();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const path = useRouterState({ select: (s) => s.location.pathname });
   const { isAuthenticated, user, logout } = useAuth();
   const navigate = useNavigate();
@@ -45,10 +46,18 @@ export function AppShell() {
   const isAuthPage = path === "/login" || path === "/signup";
 
   useEffect(() => {
-    if (!isAuthenticated && !isAuthPage) {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (mounted && !isAuthenticated && !isAuthPage) {
       navigate({ to: "/login" });
     }
-  }, [isAuthenticated, isAuthPage, navigate]);
+  }, [mounted, isAuthenticated, isAuthPage, navigate]);
+
+  if (!mounted) {
+    return <div className="min-h-screen bg-background" />;
+  }
 
   if (isAuthPage) {
     return (
@@ -169,7 +178,7 @@ export function AppShell() {
               <h2 className="font-display text-lg font-bold text-foreground">
                 {nav.find((n) => n.to === path)?.label ?? "Dashboard"}
               </h2>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground" suppressHydrationWarning>
                 {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
               </p>
             </div>
