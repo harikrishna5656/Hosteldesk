@@ -98,7 +98,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Attempt backend API first if configured
-    const apiUrl = import.meta.env.VITE_API_URL || (typeof window !== "undefined" && window.location.hostname === "localhost" ? "http://localhost:3001" : "");
+    const rawApiUrl = import.meta.env.VITE_API_URL || (typeof window !== "undefined" && window.location.hostname === "localhost" ? "http://localhost:3001" : "");
+    const apiUrl = typeof rawApiUrl === "string" ? rawApiUrl.trim().replace(/\/+$/, "") : "";
     if (apiUrl) {
       try {
         const res = await fetch(`${apiUrl}/api/auth/signup`, {
@@ -178,7 +179,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Attempt backend API first if configured
-    const apiUrl = import.meta.env.VITE_API_URL || (typeof window !== "undefined" && window.location.hostname === "localhost" ? "http://localhost:3001" : "");
+    const rawApiUrl = import.meta.env.VITE_API_URL || (typeof window !== "undefined" && window.location.hostname === "localhost" ? "http://localhost:3001" : "");
+    const apiUrl = typeof rawApiUrl === "string" ? rawApiUrl.trim().replace(/\/+$/, "") : "";
     if (apiUrl) {
       try {
         const res = await fetch(`${apiUrl}/api/auth/login`, {
