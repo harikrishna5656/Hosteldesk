@@ -13,10 +13,7 @@ import {
   expenses as initialExpenses,
 } from "./mockData";
 
-const rawApiUrl =
-  import.meta.env.VITE_API_URL ||
-  (typeof window !== "undefined" && window.location.hostname === "localhost" ? "http://localhost:3001" : "");
-const API_URL = typeof rawApiUrl === "string" ? rawApiUrl.trim().replace(/\/+$/, "") : "";
+import { API_URL } from "./apiConfig";
 
 interface HostelContextType {
   hostels: Hostel[];

@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback } from "react";
+import { getApiUrl } from "./apiConfig";
 
 export interface AuthUser {
   id?: string;
@@ -97,9 +98,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return { success: false, error: "Password must be at least 6 characters long." };
     }
 
-    // Attempt backend API first if configured
-    const rawApiUrl = import.meta.env.VITE_API_URL || (typeof window !== "undefined" && window.location.hostname === "localhost" ? "http://localhost:3001" : "");
-    const apiUrl = typeof rawApiUrl === "string" ? rawApiUrl.trim().replace(/\/+$/, "") : "";
+    // Register user directly to the Database via Backend API
+    const apiUrl = getApiUrl();
     if (apiUrl) {
       try {
         const res = await fetch(`${apiUrl}/api/auth/signup`, {
@@ -127,11 +127,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
           setAuth({ isAuthenticated: true, user: sessionUser });
           return { success: true };
-        } else if (res.status === 409 || res.status === 400) {
-          return { success: false, error: data.error || "Signup failed." };
+        } else {
+          return { success: false, error: data.error || "Signup failed on database server." };
         }
-      } catch {
-        // Fall back to client persistent storage
+      } catch (err: any) {
+        console.error("Signup network error:", err);
+        return {
+          success: false,
+          error: "Unable to reach the database server. Please check your internet connection or try again.",
+        };
       }
     }
 
@@ -178,9 +182,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return { success: false, error: "Please enter both email and password." };
     }
 
-    // Attempt backend API first if configured
-    const rawApiUrl = import.meta.env.VITE_API_URL || (typeof window !== "undefined" && window.location.hostname === "localhost" ? "http://localhost:3001" : "");
-    const apiUrl = typeof rawApiUrl === "string" ? rawApiUrl.trim().replace(/\/+$/, "") : "";
+    // Authenticate user directly against Database via Backend API
+    const apiUrl = getApiUrl();
     if (apiUrl) {
       try {
         const res = await fetch(`${apiUrl}/api/auth/login`, {
@@ -198,7 +201,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           };
           if (typeof window !== "undefined") {
             localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionUser));
-            // Ensure brand new signup starts completely empty (no previous hostels or rooms)
+            // Ensure session starts with fresh data from database
             localStorage.removeItem("hostelpms_hostels");
             localStorage.removeItem("hostelpms_rooms");
             localStorage.removeItem("hostelpms_tenants");
@@ -208,11 +211,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
           setAuth({ isAuthenticated: true, user: sessionUser });
           return { success: true };
-        } else if (res.status === 401 || res.status === 404 || res.status === 400) {
+        } else {
           return { success: false, error: data.error || "Authentication failed." };
         }
-      } catch {
-        // Fall back to client persistent storage
+      } catch (err: any) {
+        console.error("Login network error:", err);
+        return {
+          success: false,
+          error: "Unable to reach the database server. Please check your internet connection or try again.",
+        };
       }
     }
 

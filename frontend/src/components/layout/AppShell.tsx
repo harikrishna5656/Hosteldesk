@@ -105,7 +105,7 @@ export function AppShell() {
             <div className="p-3 border-b border-[#1F1F1F]">
               <HostelSwitcher compact />
             </div>
-            <nav className="flex-1 px-3 py-2 space-y-1">
+            <nav className="flex-1 px-3 py-2 space-y-1 overflow-y-auto">
               {nav.map((item) => {
                 const active = path === item.to;
                 return (
@@ -123,6 +123,34 @@ export function AppShell() {
                 );
               })}
             </nav>
+
+            {/* Mobile user profile & logout footer */}
+            <div className="p-3 border-t border-[#1F1F1F] bg-[#121212] mt-auto">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-9 h-9 rounded-full bg-[#EEFF2E] text-[#0B0B0B] font-bold text-xs flex items-center justify-center border border-border shadow-sm shrink-0">
+                    {initials}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold leading-tight text-white truncate">{user?.name ?? "PG Owner"}</p>
+                    <p className="text-xs text-[#9CA3AF] leading-tight truncate">{user?.email || "Property Owner"}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setMobileOpen(false);
+                    logout();
+                    navigate({ to: "/login" });
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#1F1F1F] hover:bg-destructive/20 text-[#9CA3AF] hover:text-destructive transition-colors text-xs font-medium shrink-0"
+                  title="Log out"
+                  aria-label="Log out"
+                >
+                  <LogOut size={15} />
+                  <span>Logout</span>
+                </button>
+              </div>
+            </div>
           </aside>
         </div>
       )}
@@ -156,8 +184,8 @@ export function AppShell() {
               <button onClick={toggle} className="p-2 rounded-lg hover:bg-muted text-foreground transition-colors" aria-label="Toggle theme">
                 {dark ? <Sun size={18} /> : <Moon size={18} />}
               </button>
-              <div className="hidden sm:flex items-center gap-2 pl-2 ml-1 border-l border-border">
-                <div className="w-8 h-8 rounded-full bg-[#0B0B0B] text-[#EEFF2E] dark:bg-[#EEFF2E] dark:text-[#0B0B0B] font-bold text-xs flex items-center justify-center border border-border shadow-sm shrink-0">
+              <div className="flex items-center gap-1.5 sm:gap-2 pl-2 ml-1 border-l border-border">
+                <div className="w-8 h-8 rounded-full bg-[#0B0B0B] text-[#EEFF2E] dark:bg-[#EEFF2E] dark:text-[#0B0B0B] font-bold text-xs flex items-center justify-center border border-border shadow-sm shrink-0" title={user?.name ?? "PG Owner"}>
                   {initials}
                 </div>
                 <div className="hidden md:block max-w-[140px]">

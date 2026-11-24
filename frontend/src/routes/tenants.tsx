@@ -30,6 +30,7 @@ import { toast } from "sonner";
 import { SectionHeader } from "@/components/ui-kit/SectionHeader";
 import { type Tenant, type Payment, formatINR } from "@/lib/mockData";
 import { useHostel } from "@/lib/hostelContext";
+import { API_URL } from "@/lib/apiConfig";
 import { AddHostelDialog } from "@/components/dialogs/AddHostelDialog";
 import {
   getTenantCycleInfo,
@@ -128,10 +129,7 @@ function TenantsPage() {
 
     // Attempt to deliver live email via backend Nodemailer service
     try {
-      const apiUrl =
-        import.meta.env.VITE_API_URL ||
-        (typeof window !== "undefined" && window.location.hostname === "localhost" ? "http://localhost:3001" : "");
-      const res = await fetch(`${apiUrl}/api/email/rent-reminder`, {
+      const res = await fetch(`${API_URL}/api/email/rent-reminder`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
