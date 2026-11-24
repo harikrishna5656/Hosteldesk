@@ -19,5 +19,12 @@
     "email": "abhitangala@gmail.com",
     "passwordHash": "6eef60ab2327124f0e4fa970d13ae97cb3c92fa80a5b0055f9f0922d54e4a515",
     "createdAt": "2026-11-23T12:48:43.723409+00:00"
+  },
+  {
+    "id": "89e85d65-81f3-4aea-88e4-e1d05543c411",
+    "name": "Anil",
+    "email": "anil@gmail.com",
+    "passwordHash": "07d49d09eb1f91986949c0f23d7dba2032f451a947914843265668d206d4153d",
+    "createdAt": "2026-11-23T13:11:21.016427+00:00"
   }
 ]
