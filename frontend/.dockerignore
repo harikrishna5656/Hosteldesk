@@ -1,0 +1,11 @@
+node_modules
+.output
+.tanstack
+.wrangler
+.env
+dist
+.git
+.gitignore
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

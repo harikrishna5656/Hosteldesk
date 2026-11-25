@@ -1,321 +1,150 @@
-# HostelPMS — System Design Document
-## Multi-Tenancy Architecture (Multi-Hostel & Multi-Branch Management)
+# HostelDesk — System Design Explained in Plain & Simple Words
 
-**Document Version:** 2.0.0  
-**Status:** Approved  
-**Author:** Antigravity Engineering  
-**Architecture Pattern:** Pooled Multi-Tenancy (Shared Database, Shared Schema with Tenant & Branch Discriminators)  
-**Target Audience:** Software Architects, Full-Stack Developers, DevOps Engineers  
+> **Who is this guide for?**  
+> Anyone! You do not need to be a software engineer or computer expert to understand this. It uses simple everyday examples (like a bank, a hotel, and a restaurant) so anyone can easily understand how HostelDesk works.
 
 ---
 
-## 1. Executive Summary & Multi-Tenancy Vision
+## 1. What is HostelDesk? (The Big Picture)
 
-**HostelPMS** is designed from the ground up to support **Hierarchical Multi-Tenancy**. A single client or property owner can operate an entire chain or portfolio of multiple hostels/PGs across different locations, cities, and property types (Boys, Girls, Co-ed) under a unified administrative umbrella.
+Imagine you own one or more **Hostels / Paying Guest (PG) buildings**. Every month, you have to:
+* Remember who has paid rent and who owes you money.
+* Keep track of empty beds and full rooms.
+* Pay electricity, water, and maintenance bills.
+* Send rent reminders to boys or girls staying in your rooms.
 
-### Core Multi-Tenancy Capabilities:
-1. **Multi-Hostel Portfolio Dashboard:** An owner can view aggregated portfolio metrics (total beds across all hostels, total monthly revenue, pending rent dues across branches) or drill down into an individual hostel branch.
-2. **Branch Switching:** Seamless switching between hostels directly from the header dropdown without re-authenticating.
-3. **Role-Based Access Control (RBAC):**
-   - **Super Admin / Property Owner:** Full access to all owned hostels, financial ledgers, staff assignments, and portfolio analytics.
-   - **Branch Warden / Property Manager:** Scoped access strictly restricted to their assigned hostel branch (e.g., managing rooms, tenants, and day-to-day check-ins for "Branch A" only).
-   - **Accountant / Bookkeeper:** Read/write access to financial records (payments, expenses) across designated hostels.
-4. **Isolated Operational Data:** Rooms, tenants, maintenance issues, utility bills, and payment records are logically separated by `hostel_id`.
+Doing this in a paper notebook is messy, mistakes happen, and pages get lost. **HostelDesk** is a smart digital notebook that runs on your phone and laptop, doing all the hard math and tracking automatically.
 
 ---
 
-## 2. Multi-Tenancy Architectural Model
+## 2. The 3 Core Parts: The Restaurant Analogy
 
-### 2.1 Isolation Strategy: Shared Database, Shared Schema (Discriminator-Based)
+Think of HostelDesk like a **famous restaurant**:
 
-To provide the ideal balance between operational cost, scaling efficiency, and code maintainability, HostelPMS implements the **Tenant & Branch Discriminator Pattern**:
-
-- **Database:** Single PostgreSQL database instance via Supabase.
-- **Tenant Scope:** Every domain table (`rooms`, `tenants`, `payments`, `expenses`, `notifications`, `staff`) contains an indexed `hostel_id` foreign key.
-- **Enforcement:** Enforced at two layers:
-  1. **Application Layer:** Express middleware (`hostelContextMiddleware`) extracts and validates the tenant context (`x-hostel-id` header).
-  2. **Database Layer:** Supabase **Row Level Security (RLS)** policies prevent cross-tenant data leakage even in the event of an application-level query mistake.
-
-```mermaid
-graph TD
-    Client["Client Browser (React 19 App)"]
-    Switcher["Hostel Switcher (Active: 'Koramangala Boys PG')"]
-    Header["HTTP Header: x-hostel-id = h_89f2a"]
-    
-    Client --> Switcher
-    Switcher --> Header
-    
-    subgraph BackendGateway ["Backend API Gateway (Express)"]
-        AuthFilter["1. JWT Auth Middleware (Extract user_id, role)"]
-        HostelFilter["2. Hostel Context Resolver (Verify user has access to x-hostel-id)"]
-        Controller["3. Scoped Route Controller"]
-    end
-    
-    Header --> AuthFilter
-    AuthFilter --> HostelFilter
-    HostelFilter --> Controller
-
-    subgraph PostgresDB ["PostgreSQL (Supabase Multi-Tenant Engine)"]
-        RLS["PostgreSQL RLS (Row Level Security)"]
-        HostelTable[("hostels table")]
-        BranchData[("Scoped Tables: rooms, tenants, payments, expenses")]
-    end
-
-    Controller --> RLS
-    RLS --> HostelTable
-    RLS --> BranchData
+```
++-------------------------------------------------------------+
+| 1. FRONTEND (The Waiter & The Menu)                        |
+| Hosted on: Vercel (https://hosteldesk-ten.vercel.app)       |
+| • What the customer sees, clicks, and types on.             |
++-------------------------------------------------------------+
+                              ↓ (Sends your request)
++-------------------------------------------------------------+
+| 2. BACKEND (The Kitchen & The Head Chef)                   |
+| Hosted on: Render (https://hosteldesk-x1f4.onrender.com)    |
+| • Does the thinking, checks your password, does the math.   |
++-------------------------------------------------------------+
+                              ↓ (Stores & fetches goods)
++-------------------------------------------------------------+
+| 3. DATABASE (The Locked Storeroom / Bank Vault)             |
+| Hosted on: Supabase (PostgreSQL Database)                   |
+| • Safe storage for rooms, tenants, payments, and passwords. |
++-------------------------------------------------------------+
 ```
 
----
+### Part 1: The Frontend (The Counter & The Menu)
+* **What is it?** The colorful screen you see on your phone or laptop. It has buttons like **"Add Room"**, **"Add Tenant"**, and **"Log Out"**.
+* **Where does it live?** On **Vercel** (`https://hosteldesk-ten.vercel.app`).
+* **What does it do?** It takes what you type (like tenant name: "Raju", rent: "₹6,000") and hands it to the Kitchen (Backend).
 
-## 3. Hierarchical Data Model & Schema Design
+### Part 2: The Backend (The Chef & The Brain)
+* **What is it?** A computer program running in the cloud that never sleeps.
+* **Where does it live?** On **Render** (`https://hosteldesk-x1f4.onrender.com`).
+* **What does it do?**
+  * Checks: *"Is this person's password correct?"*
+  * Checks: *"Does this hostel belong to Abhi or Suri?"*
+  * Sends automatic rent reminder emails to tenants.
 
-### 3.1 Entity Relationship Diagram (Multi-Hostel)
-
-```mermaid
-erDiagram
-    USERS ||--o{ HOSTELS : "owns"
-    USERS ||--o{ HOSTEL_STAFF : "assigned_as"
-    HOSTELS ||--o{ HOSTEL_STAFF : "employs"
-    HOSTELS ||--o{ ROOMS : "contains"
-    HOSTELS ||--o{ EXPENSES : "incurs"
-    HOSTELS ||--o{ PAYMENTS : "collects"
-    HOSTELS ||--o{ NOTIFICATIONS : "generates"
-    ROOMS ||--o{ TENANTS : "allocates_beds_to"
-    TENANTS ||--o{ PAYMENTS : "submits"
-    TENANTS ||--o{ NOTIFICATIONS : "receives"
-
-    USERS {
-        uuid id PK
-        string email UK
-        string password_hash
-        string full_name
-        string phone
-        string global_role "owner | superadmin"
-        timestamp created_at
-    }
-
-    HOSTELS {
-        uuid id PK
-        uuid owner_id FK "References USERS(id)"
-        string name "e.g. Green Valley PG - Branch 1"
-        string code UK "e.g. GVP-01"
-        string type "Boys | Girls | Co-ed"
-        string address
-        string city
-        string state
-        string pincode
-        string contact_phone
-        string contact_email
-        numeric monthly_target_revenue
-        timestamp created_at
-    }
-
-    HOSTEL_STAFF {
-        uuid id PK
-        uuid hostel_id FK "References HOSTELS(id)"
-        uuid user_id FK "References USERS(id)"
-        string branch_role "warden | manager | accountant | cleaner"
-        jsonb permissions
-        timestamp assigned_at
-    }
-
-    ROOMS {
-        uuid id PK
-        uuid hostel_id FK "References HOSTELS(id)"
-        string room_number
-        string room_type "Single | Double | Triple | Sharing"
-        int capacity
-        int occupied
-        numeric base_rent
-        int floor_number
-        string status "available | occupied | maintenance"
-        timestamp updated_at
-    }
-
-    TENANTS {
-        uuid id PK
-        uuid hostel_id FK "References HOSTELS(id)"
-        uuid room_id FK "References ROOMS(id)"
-        string room_number
-        string full_name
-        string phone
-        string email
-        date check_in_date
-        date rent_due_date
-        numeric agreed_rent
-        string status "active | checkout-pending | left"
-        boolean is_paid
-        string kyc_id_type "Aadhaar | Passport | Driving License"
-        string kyc_document_url
-        timestamp created_at
-    }
-
-    PAYMENTS {
-        uuid id PK
-        uuid hostel_id FK "References HOSTELS(id)"
-        uuid tenant_id FK "References TENANTS(id)"
-        string tenant_name
-        string room_number
-        numeric amount
-        string payment_method "UPI | Cash | Bank Transfer"
-        date payment_date
-        string transaction_ref
-        timestamp created_at
-    }
-
-    EXPENSES {
-        uuid id PK
-        uuid hostel_id FK "References HOSTELS(id)"
-        uuid logged_by FK "References USERS(id)"
-        date expense_date
-        string category "Utilities | Maintenance | Salaries | Groceries | Other"
-        numeric amount
-        text note
-        timestamp created_at
-    }
-
-    NOTIFICATIONS {
-        uuid id PK
-        uuid hostel_id FK "References HOSTELS(id)"
-        uuid tenant_id FK "References TENANTS(id)"
-        string notification_type "rent | maintenance | room | expense"
-        string title
-        text description
-        boolean is_read
-        timestamp sent_at
-    }
-```
+### Part 3: The Database (The Safe / Locker)
+* **What is it?** A bank-grade digital vault that permanently keeps all your records.
+* **Where does it live?** On **Supabase** (powered by PostgreSQL).
+* **What does it do?** Even if your phone battery dies or your laptop crashes, your data is 100% safe inside this vault forever.
 
 ---
 
-## 4. Multi-Hostel Context Resolution & Security
+## 3. How the Pieces Talk to Each Other (Step-by-Step)
 
-### 4.1 Request Lifecycle & Context Middleware
+Here is what happens in just 1 second when an owner adds a tenant:
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Client as Frontend (Hostel Switcher Active)
-    participant Gateway as Express API Gateway
-    participant AuthMid as JWT Auth Middleware
-    participant ContextMid as Hostel Context Resolver
-    participant Controller as Data Controller
-    participant Postgres as Supabase DB (with RLS)
+    actor Owner as 👤 Hostel Owner
+    participant Phone as 📱 Phone Screen (Vercel)
+    participant Cloud as ⚙️ Brain / Backend (Render)
+    participant Vault as 🗄️ Database Vault (Supabase)
 
-    Client->>Gateway: GET /api/rooms (Header: x-hostel-id = h_102)
-    Gateway->>AuthMid: Verify Bearer JWT
-    AuthMid-->>Gateway: Authenticated (user_id = u_01, role = owner)
-    
-    Gateway->>ContextMid: Validate Access(u_01, hostel_id = h_102)
-    alt User DOES NOT own or work at h_102
-        ContextMid-->>Client: 403 Forbidden ("Access denied to this hostel branch")
-    else User is Owner or Assigned Warden
-        ContextMid->>Controller: Attach req.hostel = { id: 'h_102', ... }
-        Controller->>Postgres: SELECT * FROM rooms WHERE hostel_id = 'h_102'
-        Postgres-->>Controller: Filtered Room records
-        Controller-->>Client: 200 OK (Rooms for Branch h_102 only)
-    end
-```
-
-### 4.2 Supabase Row-Level Security (RLS) Policy Example
-
-```sql
--- Enable RLS on domain tables
-ALTER TABLE hostels ENABLE ROW LEVEL SECURITY;
-ALTER TABLE rooms ENABLE ROW LEVEL SECURITY;
-ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
-ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
-
--- 1. Hostel Access Policy: Owners see their hostels, Wardens see assigned hostels
-CREATE POLICY hostel_access_policy ON hostels
-  FOR ALL
-  USING (
-    owner_id = auth.uid() OR
-    EXISTS (
-      SELECT 1 FROM hostel_staff
-      WHERE hostel_staff.hostel_id = hostels.id
-      AND hostel_staff.user_id = auth.uid()
-    )
-  );
-
--- 2. Scoped Entity Policy (e.g., Rooms):
-CREATE POLICY room_isolation_policy ON rooms
-  FOR ALL
-  USING (
-    EXISTS (
-      SELECT 1 FROM hostels
-      WHERE hostels.id = rooms.hostel_id
-      AND (
-        hostels.owner_id = auth.uid() OR
-        EXISTS (
-          SELECT 1 FROM hostel_staff
-          WHERE hostel_staff.hostel_id = rooms.hostel_id
-          AND hostel_staff.user_id = auth.uid()
-        )
-      )
-    )
-  );
+    Owner->>Phone: Types Tenant Name ("Raju") and Rent (₹6,000) & clicks "Save"
+    Phone->>Cloud: Sends digital message: "Please save Raju for Hostel Branch A"
+    Cloud->>Cloud: Verifies identity: "Yes, this owner owns Branch A"
+    Cloud->>Vault: Locks Raju's details safely in the database table
+    Vault-->>Cloud: Confirms: "Saved with ID #123"
+    Cloud-->>Phone: Replies: "Success! Raju is recorded"
+    Phone-->>Owner: Screen shows green badge: "Tenant Added Successfully!"
 ```
 
 ---
 
-## 5. API Design for Multi-Tenancy
+## 4. Multi-Tenancy: The "Private Lock & Key" System
 
-### 5.1 Hostel Management Endpoints (`/api/hostels`)
+### What does "Multi-Tenancy" mean?
+Imagine an **apartment building** where 100 different families live under one roof:
+* Each family has their own front door with their own **unique key**.
+* Family A can never walk into Family B’s bedroom.
+* Family B can never open Family A’s safe or see their bank passbook.
 
-| Method | Endpoint | Description | Role Required |
+In HostelDesk:
+* **Client 1 (Abhi)** creates an account. Abhi creates "Sri Sai Balaji Hostel" with 20 rooms. Only Abhi can see these 20 rooms and collect this rent.
+* **Client 2 (Suri)** signs up 5 minutes later. Suri gets a **clean, completely empty dashboard**. Suri cannot see Abhi's hostel, Abhi's rooms, or Abhi's income.
+* Every single room, tenant, payment, and expense is stamped with the Owner's ID. The backend will **reject** anyone who tries to peek into someone else's property.
+
+---
+
+## 5. Multiple Hostel Branches for One Owner
+
+What if one owner (e.g., Rajesh) owns **3 different hostels**?
+1. *Balaji Boys PG (Ameerpet)*
+2. *Balaji Girls PG (Madhapur)*
+3. *Balaji Luxury PG (Gachibowli)*
+
+```
+                       👑 Owner: Rajesh
+                              │
+         ┌────────────────────┼────────────────────┐
+         ▼                    ▼                    ▼
+🏨 Ameerpet Boys PG   🏨 Madhapur Girls PG   🏨 Gachibowli Luxury PG
+  • 15 Rooms            • 12 Rooms             • 25 Rooms
+  • 35 Tenants          • 24 Tenants           • 50 Tenants
+  • Cash Rent           • UPI Rent             • Online Rent
+```
+
+Rajesh does not need 3 different accounts. With **one single login**, Rajesh can:
+* Use the **Hostel Dropdown** at the top of the screen to switch between hostels in 1 tap.
+* Or select **"All Hostels (Portfolio)"** to see his total combined profit and occupied beds across all branches in one screen.
+
+---
+
+## 6. How Mobile & Desktop Responsive Design Works
+
+| Feature | On a Large Computer / Laptop | On a Small Mobile Phone |
+| :--- | :--- | :--- |
+| **Menu Navigation** | Sleek black sidebar always visible on the left. | Hidden neatly behind the **☰ Menu button** at the top left, plus a 5-button quick-bar at the bottom. |
+| **Profile & Logout** | Shows your initials, your name, and a one-click logout icon at the top right. | Shows your avatar and logout button at the top right, PLUS a large profile card with your email and **Logout button** inside the slide-out menu. |
+| **Room Management** | Shows rooms in a spacious multi-column grid. | Automatically stacks rooms vertically so you can easily scroll and tap with one thumb. |
+
+---
+
+## 7. Cloud Deployment Summary (Live Links)
+
+| Piece | Cloud Provider | Live Web Address | Responsibility |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/hostels` | List all hostels owned or accessible to the user | Authenticated |
-| `POST` | `/api/hostels` | Register a new hostel branch (name, address, rooms) | Owner |
-| `GET` | `/api/hostels/:id` | Get details and settings of a specific hostel branch | Owner / Warden |
-| `PUT` | `/api/hostels/:id` | Update hostel profile, rent terms, or contact details | Owner |
-| `DELETE` | `/api/hostels/:id` | Decommission / Archive a hostel branch | Owner |
-| `GET` | `/api/hostels/portfolio/summary` | Aggregated portfolio metrics (all branches combined) | Owner |
-
-### 5.2 Branch-Scoped Endpoints
-
-All operational endpoints accept the active branch context via header `x-hostel-id`:
-- **Rooms:** `GET /api/rooms`, `POST /api/rooms`
-- **Tenants:** `GET /api/tenants`, `POST /api/tenants`
-- **Payments:** `GET /api/payments`, `POST /api/payments`
-- **Expenses:** `GET /api/expenses`, `POST /api/expenses`
-- **Email Dispatch:** `POST /api/email/rent-reminder` (automatically injects the specific hostel's name, bank details, and branding into the email template)
+| **Frontend** | **Vercel** | `https://hosteldesk-ten.vercel.app` | Delivers the fast website to any phone or computer browser in the world. |
+| **Backend** | **Render** | `https://hosteldesk-x1f4.onrender.com` | Receives orders, validates passwords, handles email alerts, runs business rules. |
+| **Database** | **Supabase** | `https://jlnzrmhndaqwpzfyblzg.supabase.co` | Encrypted PostgreSQL database storing users, hostels, rooms, and payments. |
 
 ---
 
-## 6. Frontend Multi-Hostel UX & State Architecture
+## 8. Summary in 3 Simple Bullet Points
 
-### 6.1 Hostel Switcher & State Store
-
-The frontend provides a **Hostel Context Provider** (`HostelContext`) wrapping the application:
-
-```mermaid
-graph TD
-    User["User Interface"]
-    Provider["HostelProvider (Global React Context)"]
-    Storage["LocalStorage ('hostelpms_active_hostel_id')"]
-    ApiClient["API Client (Axios / Fetch Wrapper)"]
-    
-    User -->|Selects Branch| Provider
-    Provider -->|Persists Active Branch| Storage
-    Provider -->|Injects x-hostel-id Header| ApiClient
-    ApiClient -->|Sends HTTP Request| Backend["Backend API"]
-```
-
-### 6.2 Navigation & View Modes:
-1. **Branch View Mode:** When an individual hostel is selected (e.g., *"Indiranagar Girls Hostel"*), all pages (`/rooms`, `/tenants`, `/payments`, `/expenses`) display live operational data for that branch only.
-2. **Portfolio View Mode:** When *"All Hostels (Portfolio)"* is selected, the executive dashboard displays:
-   - Total beds capacity across all hostels.
-   - Aggregate occupancy rate percentage ($\sum \text{occupied} / \sum \text{capacity} \times 100$).
-   - Comparative revenue bar charts comparing performance across different branches.
-   - Combined rent arrears list categorized by branch.
-
----
-
-## 7. Migration & Rollout Plan
-
-1. **Database Migration:** Create the `hostels` and `hostel_staff` tables; alter `rooms`, `tenants`, `payments`, and `expenses` to include `hostel_id REFERENCES hostels(id) ON DELETE CASCADE`.
-2. **Seed Default Property:** Automatically create a "Main Branch" for existing single-hostel accounts and backfill existing rooms and tenants with the default `hostel_id`.
-3. **Backend Middleware Integration:** Add `hostelContextMiddleware.ts` to validate the `x-hostel-id` header on all protected routes.
-4. **Frontend Dropdown Component:** Introduce the `<HostelSwitcher />` in the top navigation bar of `AppShell.tsx`.
+1. **You visit the website on Vercel** — It is your control center with simple buttons.
+2. **The Render backend is the gatekeeper** — It checks who you are and blocks unauthorized people.
+3. **Supabase is your digital vault** — It keeps your money records, tenant phone numbers, and room counts 100% safe 24 hours a day, 365 days a year.
