@@ -37,8 +37,10 @@ function vite7TanStackStartBridge() {
 }
 
 // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
-// @cloudflare/vite-plugin builds from this — wrangler.jsonc main alone is insufficient.
 export default defineConfig({
+  nitro: {
+    preset: process.env.NITRO_PRESET || "node-server",
+  },
   tanstackStart: {
     server: { entry: "server" },
   },

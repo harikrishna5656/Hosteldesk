@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   backend:
     build:
@@ -9,14 +7,9 @@ services:
     restart: unless-stopped
     ports:
       - "3001:3001"
+    env_file:
+      - .env
     environment:
       - PORT=3001
       - NODE_ENV=production
-      - SUPABASE_URL=${SUPABASE_URL:-https://jlnzrmhndaqwpzfyblzg.supabase.co}
-      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY:-}
-      - JWT_SECRET=${JWT_SECRET:-hosteldesk_jwt_secret_key_2026}
-      - EMAIL_USER=${EMAIL_USER:-}
-      - EMAIL_PASS=${EMAIL_PASS:-}
-      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
-    env_file:
-      - .env
+      - FRONTEND_URL=http://localhost:3000
