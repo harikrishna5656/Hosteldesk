@@ -37,6 +37,16 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
     errorMessage.includes("Loading chunk") ||
     errorMessage.includes("404");
 
+  useEffect(() => {
+    if (isChunkLoadFailed && typeof window !== "undefined") {
+      const reloadKey = "chunk_load_failed_reloaded";
+      if (!sessionStorage.getItem(reloadKey)) {
+        sessionStorage.setItem(reloadKey, "1");
+        window.location.reload();
+      }
+    }
+  }, [isChunkLoadFailed]);
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
@@ -45,12 +55,13 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
           {isChunkLoadFailed
-            ? "A newer version of the application was deployed. Please reload to load the latest update."
+            ? "A newer version of the application was deployed. Reloading to load the latest update..."
             : errorMessage}
         </p>
         <button
           onClick={() => {
             if (typeof window !== "undefined") {
+              sessionStorage.removeItem("chunk_load_failed_reloaded");
               window.location.reload();
             } else {
               router.invalidate();
@@ -120,6 +131,9 @@ function RootComponent() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+
+    // Reset error reload flag on successful load
+    sessionStorage.removeItem("chunk_load_failed_reloaded");
 
     // Automatically recover when dynamic imports fail due to new deployments replacing old chunks
     const handlePreloadError = (event: any) => {

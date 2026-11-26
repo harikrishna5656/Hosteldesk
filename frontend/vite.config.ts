@@ -39,7 +39,7 @@ function vite7TanStackStartBridge() {
 // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
 export default defineConfig({
   nitro: {
-    preset: process.env.NITRO_PRESET || "node-server",
+    preset: process.env.NITRO_PRESET || (process.env.VERCEL ? "vercel" : "node-server"),
   },
   tanstackStart: {
     server: { entry: "server" },

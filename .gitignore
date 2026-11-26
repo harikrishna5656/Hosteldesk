@@ -9,6 +9,7 @@ dist-ssr/
 .nitro/
 .wrangler/
 .tanstack/
+.vercel/
 
 # Environment files
 .env
