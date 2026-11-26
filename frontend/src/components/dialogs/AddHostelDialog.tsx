@@ -9,6 +9,8 @@ interface AddHostelDialogProps {
   onClose: () => void;
 }
 
+
+
 export function AddHostelDialog({ open, onClose }: AddHostelDialogProps) {
   const { addHostel } = useHostel();
   const [name, setName] = useState("");
