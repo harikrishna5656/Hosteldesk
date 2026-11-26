@@ -1,0 +1,55 @@
+pipeline {
+  agent any
+
+  environment {
+    DOCKER_REPO = 'hosteldesk/hostelpms'
+    SERVER_IP   = '13.202.104.90'
+    TAG         = "${env.BUILD_NUMBER}"
+  }
+
+  stages {
+    stage('Checkout') {
+      steps { checkout scm }
+    }
+
+    stage('Build images') {
+      steps {
+        sh '''
+          docker build -t $DOCKER_REPO:backend-$TAG -t $DOCKER_REPO:backend-latest ./backend
+          docker build --build-arg VITE_API_URL=http://$SERVER_IP:3001 \
+            -t $DOCKER_REPO:frontend-$TAG -t $DOCKER_REPO:frontend-latest ./frontend
+        '''
+      }
+    }
+
+    stage('Push to Docker Hub') {
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'dockerhub-creds',
+                         usernameVariable: 'DH_USER', passwordVariable: 'DH_PASS')]) {
+          sh '''
+            echo "$DH_PASS" | docker login -u "$DH_USER" --password-stdin
+            docker push $DOCKER_REPO:backend-$TAG
+            docker push $DOCKER_REPO:backend-latest
+            docker push $DOCKER_REPO:frontend-$TAG
+            docker push $DOCKER_REPO:frontend-latest
+          '''
+        }
+      }
+    }
+
+    stage('Deploy to EC2') {
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'dockerhub-creds',
+                         usernameVariable: 'DH_USER', passwordVariable: 'DH_PASS')]) {
+          sshagent(credentials: ['ec2-ssh-key']) {
+            sh '''
+              scp -o StrictHostKeyChecking=no docker-compose.prod.yml ubuntu@$SERVER_IP:~/hostelpms/docker-compose.yml
+              echo "$DH_PASS" | ssh -o StrictHostKeyChecking=no ubuntu@$SERVER_IP "docker login -u $DH_USER --password-stdin"
+              ssh -o StrictHostKeyChecking=no ubuntu@$SERVER_IP "cd ~/hostelpms && docker compose pull && docker compose up -d --remove-orphans && docker image prune -f"
+            '''
+          }
+        }
+      }
+    }
+  }
+}
