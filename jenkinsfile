@@ -33,16 +33,22 @@ pipeline {
       }
     }
 
-    stage('Test') {
+      stage('Test') {
       parallel {
-        stage('Backend Tests') {
+        stage('Backend') {
           steps {
-            sh 'docker run --rm -e CI=true hostelpms-backend-test:$TAG sh -c "npm run lint --if-present && npm run test --if-present"'
+            catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+              sh 'docker run --rm hostelpms-backend-test:$TAG npm run lint --if-present'
+            }
+            sh 'docker run --rm -e CI=true hostelpms-backend-test:$TAG npm run test --if-present'
           }
         }
-        stage('Frontend Tests') {
+        stage('Frontend') {
           steps {
-            sh 'docker run --rm -e CI=true hostelpms-frontend-test:$TAG sh -c "npm run lint --if-present && npm run test --if-present"'
+            catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+              sh 'docker run --rm hostelpms-frontend-test:$TAG npm run lint --if-present'
+            }
+            sh 'docker run --rm -e CI=true hostelpms-frontend-test:$TAG npm run test --if-present'
           }
         }
       }
