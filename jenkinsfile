@@ -1,6 +1,12 @@
 pipeline {
   agent any
 
+  options {
+    timeout(time: 30, unit: 'MINUTES')
+    disableConcurrentBuilds()
+    buildDiscarder(logRotator(numToKeepStr: '10'))
+  }
+
   environment {
     DOCKER_REPO = 'hosteldesk/hostelpms'
     SERVER_IP   = '13.202.104.90'
@@ -12,7 +18,37 @@ pipeline {
       steps { checkout scm }
     }
 
-    stage('Build images') {
+    stage('Install & Compile') {
+      parallel {
+        stage('Backend') {
+          steps {
+            sh 'docker build --target builder -t hostelpms-backend-test:$TAG ./backend'
+          }
+        }
+        stage('Frontend') {
+          steps {
+            sh 'docker build --target builder --build-arg VITE_API_URL=http://$SERVER_IP:3001 -t hostelpms-frontend-test:$TAG ./frontend'
+          }
+        }
+      }
+    }
+
+    stage('Test') {
+      parallel {
+        stage('Backend Tests') {
+          steps {
+            sh 'docker run --rm -e CI=true hostelpms-backend-test:$TAG sh -c "npm run lint --if-present && npm run test --if-present"'
+          }
+        }
+        stage('Frontend Tests') {
+          steps {
+            sh 'docker run --rm -e CI=true hostelpms-frontend-test:$TAG sh -c "npm run lint --if-present && npm run test --if-present"'
+          }
+        }
+      }
+    }
+
+    stage('Build Images') {
       steps {
         sh '''
           docker build -t $DOCKER_REPO:backend-$TAG -t $DOCKER_REPO:backend-latest ./backend
@@ -51,5 +87,25 @@ pipeline {
         }
       }
     }
+
+    stage('Health Check') {
+      steps {
+        sh '''
+          for i in $(seq 1 12); do
+            if curl -fsS http://$SERVER_IP:3001/api/health && curl -fsS -o /dev/null http://$SERVER_IP:3000/; then
+              echo; echo "Backend and frontend are healthy"; exit 0
+            fi
+            echo "Waiting for the app ($i/12)..."; sleep 5
+          done
+          echo "App did not become healthy"; exit 1
+        '''
+      }
+    }
+  }
+
+  post {
+    success { echo "Deployed build #${env.BUILD_NUMBER} to http://${SERVER_IP}:3000" }
+    failure { echo "Build #${env.BUILD_NUMBER} failed. Check the red stage." }
+    always  { sh 'docker logout || true' }
   }
 }
